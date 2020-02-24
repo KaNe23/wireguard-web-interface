@@ -1,0 +1,17 @@
+#[package]
+#//name = "wireguard-interface"
+#//version = "0.1.0"
+#//authors = ["Germain Wessely <germain.wessely@plugintheworld.com>"]
+#edition = "2018"
+#//
+#//# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+#//
+#//[lib]
+#//
+[workspace]
+
+members = [
+    "client",
+    "server",
+    "wg_wrapper",
+]
