@@ -122,7 +122,10 @@ fn current_wg_config(data: &web::Data<AppData>) -> shared::wg_conf::WireGuardCon
                 .collect::<Vec<_>>()
                 .first()
             {
-                Some(ppk) => peer.private_key = ppk.private_key.clone(),
+                Some(ppk) => {
+                    peer.private_key = ppk.private_key.clone();
+                    peer.name = ppk.name.clone();
+                }
                 None => {}
             }
         }
@@ -197,10 +200,13 @@ async fn new_peer(session: Session, data: web::Data<AppData>) -> impl Responder 
         // generate public key
         new_peer.set_private_key(private_key);
 
+        new_peer.name = format!("Peer {}", wg_config.peers.len() + 1);
+
         match data.db.save_with_id(
             &PubPrivKey {
                 private_key: new_peer.private_key.clone(),
                 public_key: new_peer.public_key.clone(),
+                name: new_peer.name.clone(),
             },
             &new_peer.allowed_ips.to_string(),
         ) {
@@ -225,15 +231,6 @@ async fn new_peer(session: Session, data: web::Data<AppData>) -> impl Responder 
         return HttpResponse::Ok().json(shared::Response::WireGuardConf { config: wg_config });
     }
     HttpResponse::Forbidden().body("")
-}
-
-#[post("download_peer")]
-async fn download_peer(session: Session, _data: web::Json<shared::Request>) -> impl Responder {
-    if session.get::<String>("user").unwrap() != None {
-        HttpResponse::Forbidden().body("")
-    } else {
-        HttpResponse::Forbidden().body("")
-    }
 }
 
 #[get("download_peer/{index}")]
@@ -283,6 +280,7 @@ async fn index() -> impl Responder {
 struct PubPrivKey {
     private_key: String,
     public_key: String,
+    name: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -332,7 +330,6 @@ async fn main() -> std::io::Result<()> {
                     .service(login_request)
                     .service(logout_request)
                     .service(new_peer)
-                    .service(download_peer)
                     .service(download_peer_file)
                     .service(remove_peer)
                     .service(session_request)

@@ -56,29 +56,31 @@ pub struct Peer {
     pub private_key: String,
     pub endpoint: SocketAddrV4,
     pub allowed_ips: Ipv4Net,
+    pub name: String,
 }
 
 #[cfg(target_arch = "x86_64")]
 impl Peer {
     pub fn new() -> Self {
-        let ethernet = &get_if_addrs::get_if_addrs()
-            .unwrap()
-            .into_iter()
-            .filter(|i| &i.name[0..2] == "wl")
-            .collect::<Vec<_>>()[0];
+        //let ethernet = &get_if_addrs::get_if_addrs()
+        //    .unwrap()
+        //    .into_iter()
+        //    .filter(|i| &i.name[0..2] == "wl")
+        //    .collect::<Vec<_>>()[0];
 
-        let mut address = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 51820);
-        match ethernet.ip() {
-            IpAddr::V4(addr) => {
-                address.set_ip(addr);
-            }
-            IpAddr::V6(_addr) => {}
-        };
+        //let mut address = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 51820);
+        //match ethernet.ip() {
+        //    IpAddr::V4(addr) => {
+        //        address.set_ip(addr);
+        //    }
+        //    IpAddr::V6(_addr) => {}
+        //};
         Peer {
             public_key: "".to_string(),
             private_key: "".to_string(),
             endpoint: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8080),
             allowed_ips: Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 16).unwrap(),
+            name: "".to_string(),
         }
     }
 
@@ -96,6 +98,7 @@ impl Peer {
             private_key: "".to_string(),
             endpoint: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8080),
             allowed_ips: Ipv4Net::new(Ipv4Addr::new(0, 0, 0, 0), 16).unwrap(),
+            name: "".to_string(),
         }
     }
 }
@@ -129,7 +132,7 @@ impl WireGuardConf {
     pub fn peer_config(&self, peer: &Peer) -> String {
         let mut peer_conf = "[Interface]\n".to_string();
         // ListenPort
-        peer_conf.push_str(&format!("DNS = {}\n", self.interface.dns));
+        //peer_conf.push_str(&format!("DNS = {}\n", self.interface.dns));
         // PrivateKey
         peer_conf.push_str(&format!("Address = {}\n", peer.allowed_ips.to_string()));
         // Address
@@ -254,6 +257,7 @@ fn parse_interface_attribute(attr: &str, interface: &mut Interface) {
         _ => {}
     }
 }
+
 fn parse_peer_attribute(attr: &str, peer: &mut Peer) {
     let split = attr.split(" = ").collect::<Vec<_>>();
     let (name, value) = (split[0], split[1]);

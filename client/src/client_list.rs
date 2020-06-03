@@ -16,6 +16,7 @@ pub enum Msg {
     UsernameChanged(String),
     PasswordChanged(String),
     //GetWireGuardConfig,
+    NoAction,
     UpdateUser,
     NewPeer,
     RemovePeer(usize),
@@ -24,6 +25,8 @@ pub enum Msg {
 
 pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
+        Msg::NoAction => {}
+
         Msg::UsernameChanged(username) => {
             model.username = username;
         }
@@ -40,6 +43,7 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
             model.username.clear();
             model.password.clear();
         }
+
         Msg::LogoutRequest => {
             orders.skip().perform_cmd(logout_request());
         }
@@ -123,14 +127,6 @@ async fn remove_peer_request(index: usize) -> Result<Msg, Msg> {
         .await
 }
 
-async fn download_peer(index: usize) -> Result<Msg, Msg> {
-    fetch::Request::new("/api/download_peer")
-        .method(fetch::Method::Post)
-        .send_json(&shared::Request::PeerDownload { index })
-        .fetch_json_data(Msg::Fetched)
-        .await
-}
-
 pub fn view(model: &Model) -> Vec<Node<Msg>> {
     nodes![
         nav_bar(model),
@@ -165,6 +161,7 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
                         .enumerate()
                         .map(|(i, peer)| li![
                             attrs! {At::Class => "list-group-item"},
+                            div![format!("Name: {}", peer.name)],
                             div![format!("Peer: {}", peer.allowed_ips.to_string())],
                             div![format!("Public Key: {}", peer.public_key)],
                             a![
@@ -175,7 +172,17 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
                             ],
                             button![
                                 attrs! {At::Class => "btn btn-danger float-right"},
-                                ev(Ev::Click, move |_| Msg::RemovePeer(i)),
+                                ev(Ev::Click, move |_| {
+                                    if web_sys::window()
+                                        .unwrap()
+                                        .confirm_with_message("Sure?")
+                                        .unwrap()
+                                    {
+                                        Msg::RemovePeer(i)
+                                    } else {
+                                        Msg::NoAction
+                                    }
+                                }),
                                 "Remove"
                             ],
                         ])
@@ -203,7 +210,7 @@ fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
             if !model.session.is_empty() {
                 div![
                     span![
-                        model.session,
+                        model.session.clone(),
                         attrs! {At::Class => "alert alert-dark mb-0 mr-2 p-2",
                         At::Style => "text-transform: capitalize"},
                     ],

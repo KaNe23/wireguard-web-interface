@@ -11,13 +11,13 @@ path = "src/lib.rs"
 [dependencies]
 #seed = { path = "../../seed/" }
 seed = "0.6.0"
-serde = "^1.0.103"
-wasm-bindgen = "^0.2.55"
+serde = "^1.0.111"
+wasm-bindgen = "^0.2.63"
 
 shared = { path = "../shared"}
 
 [dependencies.web-sys]
-version = "^0.3.32"
+version = "^0.3.40"
 features = [
     "Blob",
     "Event",
