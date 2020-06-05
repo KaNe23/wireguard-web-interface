@@ -233,8 +233,8 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
     let target = target.dyn_into::<web_sys::HtmlElement>()?;
     let text_input = text_input.dyn_into::<web_sys::HtmlInputElement>()?;
 
-    let name = &target.inner_html().split_off(6); // get rid of "Name: "
-    text_input.set_value(name); // prefill the text input with the old name
+    let name = target.inner_html().split_off(6).clone(); // get rid of "Name: "
+    text_input.set_value(&name); // prefill the text input with the old name
 
     // swap the elements
     let list = target.parent_node().unwrap();
@@ -245,15 +245,19 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
 
     // create the callback on name confirmation by hitting enter
     let c = Closure::new(move |event: web_sys::KeyboardEvent| {
+        let mut new_name = name.clone();
+        let target = event
+            .target()
+            .unwrap()
+            .dyn_into::<web_sys::HtmlInputElement>()
+            .unwrap();
+
         if event.key() == "Enter" {
-            let target = event
-                .target()
-                .unwrap()
-                .dyn_into::<web_sys::HtmlInputElement>()
-                .unwrap();
+            new_name = target.value();
+            // trigger asnyc update in backend
+        }
 
-            let new_name = target.value();
-
+        if event.key() == "Escape" || event.key() == "Enter" {
             let div = document
                 .create_element("div")
                 .unwrap()
@@ -267,12 +271,8 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
             let (_, div) = copy_attribute(target.into(), div.into(), "id".to_string());
 
             let c = Closure::wrap(Box::new(move |ev: web_sys::MouseEvent| {
-                let ele = ev
-                    .target()
-                    .unwrap()
-                    .dyn_into::<web_sys::HtmlDivElement>()
-                    .unwrap();
-                let _ = show_edit_name(ele.into());
+                let ele = ev.target().unwrap();
+                let _ = show_edit_name(ele.dyn_into::<web_sys::HtmlDivElement>().unwrap());
             }) as Box<dyn Fn(_)>);
 
             div.set_onclick(Some(&JsValue::from(c.as_ref()).into()));
