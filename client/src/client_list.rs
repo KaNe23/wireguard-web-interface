@@ -19,6 +19,7 @@ pub enum Msg {
     //GetWireGuardConfig,
     NoAction,
     UpdateUser,
+    UpdatePeerName,
     NewPeer,
     RemovePeer(usize),
     Fetched(fetch::ResponseDataResult<shared::Response>),
@@ -27,6 +28,8 @@ pub enum Msg {
 pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
         Msg::NoAction => {}
+
+        Msg::UpdatePeerName => {}
 
         Msg::UsernameChanged(username) => {
             model.username = username;
@@ -164,7 +167,7 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
                             attrs! {At::Class => "list-group-item"},
                             div![
                                 attrs! {At::Id => format!("peer{}", i)},
-                                ev(Ev::Click, move |ev| {
+                                ev(Ev::Click, |ev| {
                                     let ele = ev
                                         .target()
                                         .unwrap()
@@ -255,6 +258,7 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
         if event.key() == "Enter" {
             new_name = target.value();
             // trigger asnyc update in backend
+            // update(Msg::UpdatePeerName, model);
         }
 
         if event.key() == "Escape" || event.key() == "Enter" {
@@ -270,7 +274,7 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
 
             let (_, div) = copy_attribute(target.into(), div.into(), "id".to_string());
 
-            let c = Closure::wrap(Box::new(move |ev: web_sys::MouseEvent| {
+            let c = Closure::wrap(Box::new(|ev: web_sys::MouseEvent| {
                 let ele = ev.target().unwrap();
                 let _ = show_edit_name(ele.dyn_into::<web_sys::HtmlDivElement>().unwrap());
             }) as Box<dyn Fn(_)>);
