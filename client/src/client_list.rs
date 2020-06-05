@@ -211,17 +211,11 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
 }
 
 fn copy_attribute(
-    ele1: web_sys::Element,
-    ele2: web_sys::Element,
+    ele1: web_sys::HtmlElement,
+    ele2: web_sys::HtmlElement,
     attr: String,
-) -> (web_sys::Element, web_sys::Element) {
-    let value = ele1
-        .clone()
-        .dyn_into::<web_sys::Element>()
-        .unwrap()
-        .get_attribute(&attr)
-        .unwrap();
-
+) -> (web_sys::HtmlElement, web_sys::HtmlElement) {
+    let value = ele1.get_attribute(&attr).unwrap();
     let _ = ele2.set_attribute(&attr, &value);
     (ele1, ele2)
 }
@@ -230,21 +224,26 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
 
+    // create a new input field to edit the name and add the old element id to it
     let text_input = document
         .create_element("input")?
-        .dyn_into::<web_sys::Element>()?;
-
+        .dyn_into::<web_sys::HtmlElement>()?;
     let (target, text_input) = copy_attribute(target.into(), text_input, "id".to_string());
 
-    let target = target.dyn_into::<web_sys::Node>()?;
+    let target = target.dyn_into::<web_sys::HtmlElement>()?;
+    let text_input = text_input.dyn_into::<web_sys::HtmlInputElement>()?;
 
+    let name = &target.inner_html().split_off(6); // get rid of "Name: "
+    text_input.set_value(name); // prefill the text input with the old name
+
+    // swap the elements
     let list = target.parent_node().unwrap();
-
     let _ = list.replace_child(&text_input, &target.into())?;
 
-    let text_input = text_input.dyn_into::<web_sys::HtmlElement>()?;
+    // set the focus, so one can instantly start typing
     let _ = text_input.focus();
 
+    // create the callback on name confirmation by hitting enter
     let c = Closure::new(move |event: web_sys::KeyboardEvent| {
         if event.key() == "Enter" {
             let target = event
@@ -255,13 +254,15 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
 
             let new_name = target.value();
 
-            let div = document.create_element("div").unwrap();
+            let div = document
+                .create_element("div")
+                .unwrap()
+                .dyn_into::<web_sys::HtmlElement>()
+                .unwrap();
             div.set_inner_html(&format!("Name: {}", &new_name));
 
             let parent = target.parent_node().unwrap();
             let _ = parent.replace_child(&div, &target);
-
-            let div = div.dyn_into::<web_sys::HtmlElement>().unwrap();
 
             let (_, div) = copy_attribute(target.into(), div.into(), "id".to_string());
 
@@ -271,20 +272,15 @@ fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
                     .unwrap()
                     .dyn_into::<web_sys::HtmlDivElement>()
                     .unwrap();
-                let _ = show_edit_name(ele);
+                let _ = show_edit_name(ele.into());
             }) as Box<dyn Fn(_)>);
 
-            let cb = JsValue::from(c.as_ref());
-
-            div.dyn_into::<web_sys::HtmlElement>()
-                .unwrap()
-                .set_onclick(Some(&cb.into()));
+            div.set_onclick(Some(&JsValue::from(c.as_ref()).into()));
             Closure::forget(c);
         }
     });
 
-    let cb = JsValue::from(c.as_ref());
-    text_input.set_onkeyup(Some(&cb.into()));
+    text_input.set_onkeyup(Some(&JsValue::from(c.as_ref()).into()));
     Closure::forget(c);
     Ok(())
 }
