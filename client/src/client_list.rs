@@ -166,10 +166,11 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
                             div![
                                 attrs! {At::Id => format!("peer{}", i)},
                                 ev(Ev::Click, move |ev| {
-                                    console::log_1(&ev);
-                                    let event_target = ev.target().unwrap();
-                                    let ele =
-                                        event_target.dyn_into::<web_sys::HtmlDivElement>().unwrap();
+                                    let ele = ev
+                                        .target()
+                                        .unwrap()
+                                        .dyn_into::<web_sys::HtmlDivElement>()
+                                        .unwrap();
                                     show_edit_name(ele);
                                     Msg::NoAction
                                 }),
@@ -213,25 +214,21 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
 fn show_edit_name(target: web_sys::HtmlDivElement) {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
-    console::log_1(&"1".into());
+
     let text_input = document
         .create_element("input")
         .unwrap()
         .dyn_into::<web_sys::Element>()
         .unwrap();
-    console::log_1(&"2".into());
+
     let id = target
         .clone()
         .dyn_into::<web_sys::Element>()
         .unwrap()
         .get_attribute("id")
         .unwrap();
-    console::log_1(&"3".into());
-    // let id = attr.get_named_item("id").unwrap().value();
 
     let _ = text_input.set_attribute("id", &id);
-    // .attributes()
-    // .set_named_item(&attr.get_named_item("id").unwrap());
 
     let target = target.dyn_into::<web_sys::Node>().unwrap();
 
@@ -242,19 +239,8 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
     let text_input = text_input.dyn_into::<web_sys::HtmlElement>().unwrap();
     let _ = text_input.focus();
 
-    // let client = js_sys::Reflect::get(&window, &"client".into()).unwrap();
-
-    // let f = js_sys::Reflect::get(&client.into(), &"set_name".into())
-    //     .unwrap()
-    //     .dyn_into::<Function>()
-    //     .unwrap();
-
-    // let _ = Reflect::set(&window, &"cur_rename".into(), &id.into());
-    // text_input.set_onkeyup(Some(&f));
-
     let c = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
         if event.key() == "Enter" {
-            console::log_1(&event.target().into());
             let target = event
                 .target()
                 .unwrap()
@@ -283,9 +269,11 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
             let _ = div.set_attribute("id", &id);
 
             let c = Closure::wrap(Box::new(move |ev: web_sys::MouseEvent| {
-                let event_target = ev.target().unwrap();
-                let ele = event_target.dyn_into::<web_sys::HtmlDivElement>().unwrap();
-                // console::log_1(&ele.into());
+                let ele = ev
+                    .target()
+                    .unwrap()
+                    .dyn_into::<web_sys::HtmlDivElement>()
+                    .unwrap();
                 show_edit_name(ele);
             }) as Box<dyn FnMut(_)>);
 
@@ -293,50 +281,13 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
 
             div.set_onclick(Some(&cb.into()));
             Closure::forget(c);
-            // let id = Reflect::get(&window, &"cur_rename".into()).unwrap();
-            // let res = window
-            //     .document()
-            //     .expect("should have a document on window")
-            //     .get_element_by_id(&id.as_string().unwrap());
-            // console::log_1(&res.into());
-            // console::log_1(&id.as_string().unwrap().into());
-            // let ele = window
-            //     .document()
-            //     .expect("should have a document on window")
-            //     .get_element_by_id(&id.as_string().unwrap())
-            //     .unwrap()
-            //     .dyn_into::<web_sys::Node>()
-            //     .unwrap();
-
-            // let div = document
-            //     .create_element("div")
-            //     .unwrap()
-            //     .dyn_into::<web_sys::HtmlDivElement>()
-            //     .unwrap();
-
-            // let node = ele.parent_node().unwrap();
-            // let _ = node.replace_child(&ele, &div);
-            // console::log_1(&id.into());
         }
-        console::log_1(&event.into());
     }) as Box<dyn FnMut(_)>);
 
     let cb = JsValue::from(c.as_ref());
     text_input.set_onkeyup(Some(&cb.into()));
     Closure::forget(c);
 }
-
-// #[wasm_bindgen]
-// pub fn set_name() {
-//     // console::log_1(&ele_id.into());
-//     let window = web_sys::window().expect("no global `window` exists");
-//     // let ele = window
-//     //     .document()
-//     //     .expect("should have a document on window")
-//     //     .get_element_by_id(&ele_id);
-//     let id = Reflect::get(&window, &"cur_rename".into()).unwrap();
-//     console::log_1(&id.into());
-// }
 
 fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
     nodes![nav![
