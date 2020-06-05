@@ -275,14 +275,14 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
                     .dyn_into::<web_sys::HtmlDivElement>()
                     .unwrap();
                 show_edit_name(ele);
-            }) as Box<dyn FnMut(_)>);
+            }) as Box<dyn Fn(_)>);
 
             let cb = JsValue::from(c.as_ref());
 
             div.set_onclick(Some(&cb.into()));
             Closure::forget(c);
         }
-    }) as Box<dyn FnMut(_)>);
+    }) as Box<dyn Fn(_)>);
 
     let cb = JsValue::from(c.as_ref());
     text_input.set_onkeyup(Some(&cb.into()));
