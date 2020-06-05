@@ -211,6 +211,22 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
     ]
 }
 
+fn copy_attribute(
+    ele1: web_sys::Element,
+    ele2: web_sys::Element,
+    attr: String,
+) -> (web_sys::Element, web_sys::Element) {
+    let value = ele1
+        .clone()
+        .dyn_into::<web_sys::Element>()
+        .unwrap()
+        .get_attribute(&attr)
+        .unwrap();
+
+    let _ = ele2.set_attribute(&attr, &value);
+    (ele1, ele2)
+}
+
 fn show_edit_name(target: web_sys::HtmlDivElement) {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
@@ -221,14 +237,7 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
         .dyn_into::<web_sys::Element>()
         .unwrap();
 
-    let id = target
-        .clone()
-        .dyn_into::<web_sys::Element>()
-        .unwrap()
-        .get_attribute("id")
-        .unwrap();
-
-    let _ = text_input.set_attribute("id", &id);
+    let (target, text_input) = copy_attribute(target.into(), text_input, "id".to_string());
 
     let target = target.dyn_into::<web_sys::Node>().unwrap();
 
@@ -239,7 +248,7 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
     let text_input = text_input.dyn_into::<web_sys::HtmlElement>().unwrap();
     let _ = text_input.focus();
 
-    let c = Closure::wrap(Box::new(move |event: web_sys::KeyboardEvent| {
+    let c = Closure::new(move |event: web_sys::KeyboardEvent| {
         if event.key() == "Enter" {
             let target = event
                 .target()
@@ -249,8 +258,6 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
 
             let new_name = target.value();
 
-            let window = web_sys::window().expect("no global `window` exists");
-            let document = window.document().expect("should have a document on window");
             let div = document.create_element("div").unwrap();
             div.set_inner_html(&format!("Name: {}", &new_name));
 
@@ -259,14 +266,7 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
 
             let div = div.dyn_into::<web_sys::HtmlElement>().unwrap();
 
-            let id = target
-                .clone()
-                .dyn_into::<web_sys::Element>()
-                .unwrap()
-                .get_attribute("id")
-                .unwrap();
-
-            let _ = div.set_attribute("id", &id);
+            let (_, div) = copy_attribute(target.into(), div.into(), "id".to_string());
 
             let c = Closure::wrap(Box::new(move |ev: web_sys::MouseEvent| {
                 let ele = ev
@@ -279,10 +279,12 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
 
             let cb = JsValue::from(c.as_ref());
 
-            div.set_onclick(Some(&cb.into()));
+            div.dyn_into::<web_sys::HtmlElement>()
+                .unwrap()
+                .set_onclick(Some(&cb.into()));
             Closure::forget(c);
         }
-    }) as Box<dyn Fn(_)>);
+    });
 
     let cb = JsValue::from(c.as_ref());
     text_input.set_onkeyup(Some(&cb.into()));
