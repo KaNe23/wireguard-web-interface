@@ -1,4 +1,3 @@
-use js_sys::*;
 use seed::{self, prelude::*, *};
 use wasm_bindgen::*;
 use web_sys::console;
@@ -171,7 +170,7 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
                                         .unwrap()
                                         .dyn_into::<web_sys::HtmlDivElement>()
                                         .unwrap();
-                                    show_edit_name(ele);
+                                    let _ = show_edit_name(ele);
                                     Msg::NoAction
                                 }),
                                 format!("Name: {}", peer.name)
@@ -227,25 +226,23 @@ fn copy_attribute(
     (ele1, ele2)
 }
 
-fn show_edit_name(target: web_sys::HtmlDivElement) {
+fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
 
     let text_input = document
-        .create_element("input")
-        .unwrap()
-        .dyn_into::<web_sys::Element>()
-        .unwrap();
+        .create_element("input")?
+        .dyn_into::<web_sys::Element>()?;
 
     let (target, text_input) = copy_attribute(target.into(), text_input, "id".to_string());
 
-    let target = target.dyn_into::<web_sys::Node>().unwrap();
+    let target = target.dyn_into::<web_sys::Node>()?;
 
     let list = target.parent_node().unwrap();
 
-    let _ = list.replace_child(&text_input, &target.into()).unwrap();
+    let _ = list.replace_child(&text_input, &target.into())?;
 
-    let text_input = text_input.dyn_into::<web_sys::HtmlElement>().unwrap();
+    let text_input = text_input.dyn_into::<web_sys::HtmlElement>()?;
     let _ = text_input.focus();
 
     let c = Closure::new(move |event: web_sys::KeyboardEvent| {
@@ -274,7 +271,7 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
                     .unwrap()
                     .dyn_into::<web_sys::HtmlDivElement>()
                     .unwrap();
-                show_edit_name(ele);
+                let _ = show_edit_name(ele);
             }) as Box<dyn Fn(_)>);
 
             let cb = JsValue::from(c.as_ref());
@@ -289,6 +286,7 @@ fn show_edit_name(target: web_sys::HtmlDivElement) {
     let cb = JsValue::from(c.as_ref());
     text_input.set_onkeyup(Some(&cb.into()));
     Closure::forget(c);
+    Ok(())
 }
 
 fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
