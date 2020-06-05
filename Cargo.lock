@@ -572,6 +572,7 @@ dependencies = [
 name = "client"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "seed",
  "serde",
  "shared",

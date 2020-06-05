@@ -13,6 +13,7 @@ path = "src/lib.rs"
 seed = "0.6.0"
 serde = "^1.0.111"
 wasm-bindgen = "^0.2.63"
+js-sys = "0.3.40"
 
 shared = { path = "../shared"}
 
@@ -26,4 +27,12 @@ features = [
     "FileList",
     "FormData",
     "HtmlInputElement",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "HtmlDivElement",
+    "CssStyleDeclaration",
+    "NamedNodeMap",
+    "Attr",
+    "KeyboardEvent"
 ]
