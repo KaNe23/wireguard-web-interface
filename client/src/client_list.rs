@@ -19,7 +19,7 @@ pub enum Msg {
     //GetWireGuardConfig,
     NoAction,
     UpdateUser,
-    UpdatePeerName,
+    UpdatePeerName(usize, String),
     NewPeer,
     RemovePeer(usize),
     Fetched(fetch::ResponseDataResult<shared::Response>),
@@ -29,7 +29,10 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
         Msg::NoAction => {}
 
-        Msg::UpdatePeerName => {}
+        Msg::UpdatePeerName(i, name) => {
+            model.wireguard_config.peers[i].name = name.clone();
+            orders.perform_cmd(update_peer_name(i, name));
+        }
 
         Msg::UsernameChanged(username) => {
             model.username = username;
@@ -79,6 +82,8 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
                 model.loaded = true;
             }
             shared::Response::Logout => model.session.clear(),
+            shared::Response::Failure => {}
+            shared::Response::Success => {}
         },
 
         Msg::Fetched(Err(fail_reason)) => {
@@ -131,6 +136,14 @@ async fn remove_peer_request(index: usize) -> Result<Msg, Msg> {
         .await
 }
 
+async fn update_peer_name(index: usize, name: String) -> Result<Msg, Msg> {
+    fetch::Request::new("/api/update_peer_name")
+        .method(fetch::Method::Post)
+        .send_json(&shared::Request::UpdatePeerName { index, name })
+        .fetch_json_data(Msg::Fetched)
+        .await
+}
+
 pub fn view(model: &Model) -> Vec<Node<Msg>> {
     nodes![
         nav_bar(model),
@@ -167,16 +180,39 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
                             attrs! {At::Class => "list-group-item"},
                             div![
                                 attrs! {At::Id => format!("peer{}", i)},
-                                ev(Ev::Click, |ev| {
-                                    let ele = ev
-                                        .target()
+                                ev(Ev::Click, move |ev| {
+                                    let target = ev.target().unwrap();
+                                    let ele = target.dyn_into::<web_sys::HtmlElement>().unwrap();
+                                    let name = ele.inner_html().split_off(6).clone(); // get rid of "Name: "
+                                    hide_element(format!("peer{}", i));
+                                    show_element(format!("peer{}i", i));
+                                    find_element_by_id(format!("peer{}i", i))
+                                        .dyn_into::<web_sys::HtmlInputElement>()
                                         .unwrap()
-                                        .dyn_into::<web_sys::HtmlDivElement>()
-                                        .unwrap();
-                                    let _ = show_edit_name(ele);
+                                        .set_value(&name); // prefill the text input with the old name
+
+                                    focus_element(format!("peer{}i", i));
                                     Msg::NoAction
                                 }),
                                 format!("Name: {}", peer.name)
+                            ],
+                            input![
+                                attrs! {At::Id => format!("peer{}i", i),
+                                At::Style => "display: none"},
+                                ev(Ev::KeyDown, move |ev: web_sys::Event| {
+                                    let ev = ev.dyn_into::<web_sys::KeyboardEvent>().unwrap();
+                                    if ev.key() == "Enter" {
+                                        let target = ev.target().unwrap();
+                                        let ele =
+                                            target.dyn_into::<web_sys::HtmlInputElement>().unwrap();
+                                        let value = ele.value();
+                                        hide_element(format!("peer{}i", i));
+                                        show_element(format!("peer{}", i));
+                                        Msg::UpdatePeerName(i.clone(), value)
+                                    } else {
+                                        Msg::NoAction
+                                    }
+                                })
                             ],
                             div![format!("Peer: {}", peer.allowed_ips.to_string())],
                             div![format!("Public Key: {}", peer.public_key)],
@@ -213,80 +249,28 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
     ]
 }
 
-fn copy_attribute(
-    ele1: web_sys::HtmlElement,
-    ele2: web_sys::HtmlElement,
-    attr: String,
-) -> (web_sys::HtmlElement, web_sys::HtmlElement) {
-    let value = ele1.get_attribute(&attr).unwrap();
-    let _ = ele2.set_attribute(&attr, &value);
-    (ele1, ele2)
-}
-
-fn show_edit_name(target: web_sys::HtmlDivElement) -> Result<(), JsValue> {
+fn find_element_by_id(element_id: String) -> web_sys::HtmlElement {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
+    document
+        .get_element_by_id(&element_id)
+        .unwrap()
+        .dyn_into::<web_sys::HtmlElement>()
+        .unwrap()
+}
 
-    // create a new input field to edit the name and add the old element id to it
-    let text_input = document
-        .create_element("input")?
-        .dyn_into::<web_sys::HtmlElement>()?;
-    let (target, text_input) = copy_attribute(target.into(), text_input, "id".to_string());
+fn hide_element(element_id: String) {
+    let style = find_element_by_id(element_id).style();
+    let _ = style.set_property("display", "none");
+}
 
-    let target = target.dyn_into::<web_sys::HtmlElement>()?;
-    let text_input = text_input.dyn_into::<web_sys::HtmlInputElement>()?;
+fn show_element(element_id: String) {
+    let style = find_element_by_id(element_id).style();
+    let _ = style.set_property("display", "");
+}
 
-    let name = target.inner_html().split_off(6).clone(); // get rid of "Name: "
-    text_input.set_value(&name); // prefill the text input with the old name
-
-    // swap the elements
-    let list = target.parent_node().unwrap();
-    let _ = list.replace_child(&text_input, &target.into())?;
-
-    // set the focus, so one can instantly start typing
-    let _ = text_input.focus();
-
-    // create the callback on name confirmation by hitting enter
-    let c = Closure::new(move |event: web_sys::KeyboardEvent| {
-        let mut new_name = name.clone();
-        let target = event
-            .target()
-            .unwrap()
-            .dyn_into::<web_sys::HtmlInputElement>()
-            .unwrap();
-
-        if event.key() == "Enter" {
-            new_name = target.value();
-            // trigger asnyc update in backend
-            // update(Msg::UpdatePeerName, model);
-        }
-
-        if event.key() == "Escape" || event.key() == "Enter" {
-            let div = document
-                .create_element("div")
-                .unwrap()
-                .dyn_into::<web_sys::HtmlElement>()
-                .unwrap();
-            div.set_inner_html(&format!("Name: {}", &new_name));
-
-            let parent = target.parent_node().unwrap();
-            let _ = parent.replace_child(&div, &target);
-
-            let (_, div) = copy_attribute(target.into(), div.into(), "id".to_string());
-
-            let c = Closure::wrap(Box::new(|ev: web_sys::MouseEvent| {
-                let ele = ev.target().unwrap();
-                let _ = show_edit_name(ele.dyn_into::<web_sys::HtmlDivElement>().unwrap());
-            }) as Box<dyn Fn(_)>);
-
-            div.set_onclick(Some(&JsValue::from(c.as_ref()).into()));
-            Closure::forget(c);
-        }
-    });
-
-    text_input.set_onkeyup(Some(&JsValue::from(c.as_ref()).into()));
-    Closure::forget(c);
-    Ok(())
+fn focus_element(element_id: String) {
+    let _ = find_element_by_id(element_id).focus();
 }
 
 fn nav_bar(model: &Model) -> Vec<Node<Msg>> {

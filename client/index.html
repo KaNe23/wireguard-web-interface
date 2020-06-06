@@ -19,9 +19,7 @@
     <!-- https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html -->
     <script type="module">
         import init from '/pkg/package.js';
-        init('/pkg/package_bg.wasm').then(function(c){
-          window.client = c;
-        });
+        init('/pkg/package_bg.wasm')
     </script>
   </body>
 </html>

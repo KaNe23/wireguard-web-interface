@@ -233,6 +233,37 @@ async fn new_peer(session: Session, data: web::Data<AppData>) -> impl Responder 
     HttpResponse::Forbidden().body("")
 }
 
+#[post("update_peer_name")]
+async fn update_peer_name(
+    session: Session,
+    data: web::Data<AppData>,
+    request_data: web::Json<shared::Request>,
+) -> impl Responder {
+    if session.get::<String>("user").unwrap() != None {
+        match request_data.0 {
+            shared::Request::UpdatePeerName { index, name } => {
+                let mut wg_config = current_wg_config(&data);
+
+                let peer = &mut wg_config.peers[index];
+                peer.name = name;
+
+                let _ = data.db.save_with_id(
+                    &PubPrivKey {
+                        private_key: peer.private_key.clone(),
+                        public_key: peer.public_key.clone(),
+                        name: peer.name.clone(),
+                    },
+                    &peer.allowed_ips.to_string(),
+                );
+                web::Json(shared::Response::Success)
+            }
+            _ => web::Json(shared::Response::Failure),
+        }
+    } else {
+        web::Json(shared::Response::Failure)
+    }
+}
+
 #[get("download_peer/{index}")]
 async fn download_peer_file(
     session: Session,
@@ -330,6 +361,7 @@ async fn main() -> std::io::Result<()> {
                     .service(login_request)
                     .service(logout_request)
                     .service(new_peer)
+                    .service(update_peer_name)
                     .service(download_peer_file)
                     .service(remove_peer)
                     .service(session_request)
