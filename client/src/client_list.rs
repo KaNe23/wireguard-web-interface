@@ -176,68 +176,88 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
                         .clone()
                         .into_iter()
                         .enumerate()
-                        .map(|(i, peer)| li![
-                            attrs! {At::Class => "list-group-item"},
-                            div![
-                                attrs! {At::Id => format!("peer{}", i)},
-                                ev(Ev::Click, move |ev| {
-                                    let target = ev.target().unwrap();
-                                    let ele = target.dyn_into::<web_sys::HtmlElement>().unwrap();
-                                    let name = ele.inner_html().split_off(6).clone(); // get rid of "Name: "
-                                    hide_element(format!("peer{}", i));
-                                    show_element(format!("peer{}i", i));
-                                    find_element_by_id(format!("peer{}i", i))
-                                        .dyn_into::<web_sys::HtmlInputElement>()
-                                        .unwrap()
-                                        .set_value(&name); // prefill the text input with the old name
+                        .map(|(i, peer)| {
+                            // making lots of copies for all the closures
+                            let name = peer.name.clone();
+                            let div_id1 = format!("peer{}", i);
+                            let div_id2 = div_id1.clone();
+                            let div_id3 = div_id1.clone();
+                            let input_id1 = format!("peer{}i", i);
+                            let input_id2 = input_id1.clone();
+                            let input_id3 = input_id1.clone();
+                            li![
+                                attrs! {At::Class => "list-group-item"},
+                                div![
+                                    attrs! {At::Id => div_id1},
+                                    ev(Ev::Click, move |_ev| {
+                                        hide_element(&div_id1);
+                                        show_element(&input_id1);
+                                        find_element_by_id(&input_id1)
+                                            .dyn_into::<web_sys::HtmlInputElement>()
+                                            .unwrap()
+                                            .set_value(&name); // prefill the text input with the old name
 
-                                    focus_element(format!("peer{}i", i));
-                                    Msg::NoAction
-                                }),
-                                format!("Name: {}", peer.name)
-                            ],
-                            input![
-                                attrs! {At::Id => format!("peer{}i", i),
-                                At::Style => "display: none"},
-                                ev(Ev::KeyDown, move |ev: web_sys::Event| {
-                                    let ev = ev.dyn_into::<web_sys::KeyboardEvent>().unwrap();
-                                    if ev.key() == "Enter" {
-                                        let target = ev.target().unwrap();
-                                        let ele =
-                                            target.dyn_into::<web_sys::HtmlInputElement>().unwrap();
-                                        let value = ele.value();
-                                        hide_element(format!("peer{}i", i));
-                                        show_element(format!("peer{}", i));
-                                        Msg::UpdatePeerName(i.clone(), value)
-                                    } else {
+                                        focus_element(&input_id1);
                                         Msg::NoAction
-                                    }
-                                })
-                            ],
-                            div![format!("Peer: {}", peer.allowed_ips.to_string())],
-                            div![format!("Public Key: {}", peer.public_key)],
-                            a![
-                                attrs! {At::Class => "btn btn-secondary",
-                                At::Href => format!("api/download_peer/{}", i),
-                                At::Target => "_blank", At::Download => ""},
-                                "Download"
-                            ],
-                            button![
-                                attrs! {At::Class => "btn btn-danger float-right"},
-                                ev(Ev::Click, move |_| {
-                                    if web_sys::window()
-                                        .unwrap()
-                                        .confirm_with_message("Sure?")
-                                        .unwrap()
-                                    {
-                                        Msg::RemovePeer(i)
-                                    } else {
+                                    }),
+                                    format!("Name: {}", peer.name)
+                                ],
+                                input![
+                                    attrs! {At::Id => format!("peer{}i", i),
+                                    At::Style => "display: none"},
+                                    ev(Ev::Blur, move |_ev: web_sys::Event| {
+                                        hide_element(&input_id3);
+                                        show_element(&div_id3);
                                         Msg::NoAction
-                                    }
-                                }),
-                                "Remove"
-                            ],
-                        ])
+                                    }),
+                                    ev(Ev::KeyDown, move |ev: web_sys::Event| {
+                                        let ev = ev.dyn_into::<web_sys::KeyboardEvent>().unwrap();
+                                        let mut action = Msg::NoAction;
+
+                                        if ev.key() == "Enter" {
+                                            let value = ev
+                                                .target()
+                                                .unwrap()
+                                                .dyn_into::<web_sys::HtmlInputElement>()
+                                                .unwrap()
+                                                .value();
+
+                                            action = Msg::UpdatePeerName(i.clone(), value);
+                                        }
+
+                                        if ev.key() == "Enter" || ev.key() == "Escape" {
+                                            hide_element(&input_id2);
+                                            show_element(&div_id2);
+                                        }
+
+                                        action
+                                    })
+                                ],
+                                div![format!("Peer: {}", peer.allowed_ips.to_string())],
+                                div![format!("Public Key: {}", peer.public_key)],
+                                a![
+                                    attrs! {At::Class => "btn btn-secondary",
+                                    At::Href => format!("api/download_peer/{}", i),
+                                    At::Target => "_blank", At::Download => ""},
+                                    "Download"
+                                ],
+                                button![
+                                    attrs! {At::Class => "btn btn-danger float-right"},
+                                    ev(Ev::Click, move |_| {
+                                        if web_sys::window()
+                                            .unwrap()
+                                            .confirm_with_message("Sure?")
+                                            .unwrap()
+                                        {
+                                            Msg::RemovePeer(i)
+                                        } else {
+                                            Msg::NoAction
+                                        }
+                                    }),
+                                    "Remove"
+                                ],
+                            ]
+                        })
                 ],
                 button![
                     attrs! {At::Class => "btn btn-secondary mt-1"},
@@ -249,7 +269,7 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
     ]
 }
 
-fn find_element_by_id(element_id: String) -> web_sys::HtmlElement {
+fn find_element_by_id(element_id: &String) -> web_sys::HtmlElement {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
     document
@@ -259,18 +279,23 @@ fn find_element_by_id(element_id: String) -> web_sys::HtmlElement {
         .unwrap()
 }
 
-fn hide_element(element_id: String) {
-    let style = find_element_by_id(element_id).style();
-    let _ = style.set_property("display", "none");
+fn hide_element(element_id: &String) {
+    let element = find_element_by_id(element_id);
+    set_style_attribute(element, &"display".to_string(), &"none".to_string());
 }
 
-fn show_element(element_id: String) {
-    let style = find_element_by_id(element_id).style();
-    let _ = style.set_property("display", "");
+fn show_element(element_id: &String) {
+    let element = find_element_by_id(element_id);
+    set_style_attribute(element, &"display".to_string(), &"".to_string());
 }
 
-fn focus_element(element_id: String) {
+fn focus_element(element_id: &String) {
     let _ = find_element_by_id(element_id).focus();
+}
+
+fn set_style_attribute(element: web_sys::HtmlElement, attribute: &String, value: &String) {
+    let style = element.style();
+    let _ = style.set_property(attribute, value);
 }
 
 fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
