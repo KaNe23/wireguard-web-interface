@@ -5,8 +5,8 @@ authors = ["Your Name <email@address.com>"]
 edition = "2018"
 
 [dependencies]
-ipnet = { version = "2.2", features = ["serde"] }
-serde = { version = "1.0.104", features = ["derive"]}
+ipnet = { version = "2.3", features = ["serde"] }
+serde = { version = "1.0.111", features = ["derive"]}
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 get_if_addrs = "0.5.3"
