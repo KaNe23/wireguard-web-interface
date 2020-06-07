@@ -42,7 +42,7 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
         Msg::NoAction => {}
 
-        Msg::ShowPage(page) => {}
+        Msg::ShowPage(page) => model.current_page = page,
 
         Msg::UpdatePeerName(i, name) => {
             model.wireguard_config.peers[i].name = name.clone();
@@ -58,20 +58,18 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
         }
 
         Msg::LoginRequest => {
+            model.loaded = false;
             let username = model.username.clone();
             let password = model.password.clone();
-            orders
-                .skip()
-                .perform_cmd(async { Msg::Fetched(login_request(username, password).await) });
+            orders.perform_cmd(async { Msg::Fetched(login_request(username, password).await) });
 
             model.username.clear();
             model.password.clear();
         }
 
         Msg::LogoutRequest => {
-            orders
-                .skip()
-                .perform_cmd(async { Msg::Fetched(logout_request().await) });
+            model.loaded = false;
+            orders.perform_cmd(async { Msg::Fetched(logout_request().await) });
         }
 
         Msg::NewPeer => {
@@ -94,6 +92,7 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
 
         Msg::Fetched(Ok(response_data)) => match response_data {
             shared::Response::LoginSuccess { session } => {
+                model.loaded = true;
                 model.session = session;
                 orders.perform_cmd(async { Msg::Fetched(config_request().await) });
             }
@@ -102,9 +101,14 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
             }
             shared::Response::WireGuardConf { config } => {
                 model.wireguard_config = config;
+                model.current_page = Page::WGCong;
                 model.loaded = true;
             }
-            shared::Response::Logout => model.session.clear(),
+            shared::Response::Logout => {
+                model.loaded = true;
+                model.session.clear();
+                model.current_page = Page::Login;
+            }
             shared::Response::Failure => {}
             shared::Response::Success => {}
         },
@@ -279,32 +283,45 @@ fn display_peer(index: usize, peer: &shared::wg_conf::Peer) -> Vec<Node<Msg>> {
     ]]
 }
 
+fn wg_conf_page(wg_config: &shared::wg_conf::WireGuardConf) -> Vec<Node<Msg>> {
+    nodes![
+        ul![
+            attrs! {At::Class => "list-group", At::Style => "margin-top: -1px !important"},
+            display_interface(&wg_config.interface),
+            wg_config
+                .peers
+                .clone()
+                .into_iter()
+                .enumerate()
+                .map(|(i, peer)| { display_peer(i, &peer) })
+        ],
+        button![
+            attrs! {At::Class => "btn btn-secondary mt-1"},
+            ev(Ev::Click, |_| Msg::NewPeer),
+            "Add New Peer"
+        ],
+    ]
+}
+
+fn edit_user_page() -> Vec<Node<Msg>> {
+    nodes![button![
+        attrs! {At::Class => "btn btn-secondary mt-1"},
+        ev(Ev::Click, |_| Msg::ShowPage(Page::WGCong)),
+        "Back"
+    ],]
+}
+
 pub fn view(model: &Model) -> Vec<Node<Msg>> {
     nodes![
         nav_bar(model),
         if !model.loaded {
             nodes![]
-        } else if model.session.is_empty() {
-            login_view(model)
         } else {
-            let wg_config = &model.wireguard_config;
-            nodes![
-                ul![
-                    attrs! {At::Class => "list-group", At::Style => "margin-top: -1px !important"},
-                    display_interface(&wg_config.interface),
-                    wg_config
-                        .peers
-                        .clone()
-                        .into_iter()
-                        .enumerate()
-                        .map(|(i, peer)| { display_peer(i, &peer) })
-                ],
-                button![
-                    attrs! {At::Class => "btn btn-secondary mt-1"},
-                    ev(Ev::Click, |_| Msg::NewPeer),
-                    "Add New Peer"
-                ],
-            ]
+            match model.current_page {
+                Page::Login => login_view(model),
+                Page::WGCong => wg_conf_page(&model.wireguard_config),
+                Page::EditUser => edit_user_page(),
+            }
         }
     ]
 }
@@ -343,16 +360,13 @@ fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
         attrs! {At::Class => "navbar navbar-light bg-white border rounded-top mt-1"},
         a!["Wireguard", attrs! {At::Class => "navbar-brand"}],
         if !model.loaded {
-            div![
-                attrs![At::Class => "spinner-border text-secondary"],
-                span![attrs![At::Class => "sr-only"], "Loading..."],
-            ]
+            div![attrs![At::Class => "spinner-border text-secondary"]]
         } else {
             if !model.session.is_empty() {
                 div![
                     span![
                         model.session.clone(),
-                        attrs! {At::Class => "alert alert-dark mb-0 mr-2 p-2",
+                        attrs! {At::Class => "btn alert-dark mb-0 mr-2",
                         At::Style => "text-transform: capitalize"},
                         ev(Ev::Click, |_| Msg::ShowPage(Page::EditUser))
                     ],
