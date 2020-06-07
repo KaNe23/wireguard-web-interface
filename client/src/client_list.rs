@@ -9,6 +9,19 @@ pub struct Model {
     pub password: String,
     pub wireguard_config: shared::wg_conf::WireGuardConf,
     pub loaded: bool,
+    pub current_page: Page,
+}
+
+pub enum Page {
+    Login,
+    WGCong,
+    EditUser,
+}
+
+impl Default for Page {
+    fn default() -> Page {
+        Page::Login
+    }
 }
 
 pub enum Msg {
@@ -21,12 +34,15 @@ pub enum Msg {
     UpdatePeerName(usize, String),
     NewPeer,
     RemovePeer(usize),
+    ShowPage(Page),
     Fetched(fetch::Result<shared::Response>),
 }
 
 pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
     match msg {
         Msg::NoAction => {}
+
+        Msg::ShowPage(page) => {}
 
         Msg::UpdatePeerName(i, name) => {
             model.wireguard_config.peers[i].name = name.clone();
@@ -172,6 +188,97 @@ async fn update_peer_name(index: usize, name: String) -> fetch::Result<shared::R
         .await
 }
 
+fn display_interface(interface: &shared::wg_conf::Interface) -> Vec<Node<Msg>> {
+    nodes![li![
+        attrs! {At::Class => "list-group-item rounded-0"},
+        div![format!("Interface: {}", interface.address.to_string())],
+        div![format!("Private Key: {}", interface.private_key)],
+        div![format!("Public Key: {}", interface.public_key)],
+    ]]
+}
+
+fn display_peer(index: usize, peer: &shared::wg_conf::Peer) -> Vec<Node<Msg>> {
+    // making lots of copies for all the closures
+    let name = peer.name.clone();
+    let div_id1 = format!("peer{}", index);
+    let div_id2 = div_id1.clone();
+    let div_id3 = div_id1.clone();
+    let input_id1 = format!("peer{}i", index);
+    let input_id2 = input_id1.clone();
+    let input_id3 = input_id1.clone();
+    nodes![li![
+        attrs! {At::Class => "list-group-item"},
+        div![
+            attrs! {At::Id => div_id1},
+            ev(Ev::Click, move |_ev| {
+                hide_element(&div_id1);
+                show_element(&input_id1);
+                find_element_by_id(&input_id1)
+                    .dyn_into::<web_sys::HtmlInputElement>()
+                    .unwrap()
+                    .set_value(&name); // prefill the text input with the old name
+
+                focus_element(&input_id1);
+                Msg::NoAction
+            }),
+            format!("Name: {}", peer.name)
+        ],
+        input![
+            attrs! {At::Id => input_id3, At::Style => "display: none"},
+            ev(Ev::Blur, move |_ev: web_sys::Event| {
+                hide_element(&input_id3);
+                show_element(&div_id3);
+                Msg::NoAction
+            }),
+            ev(Ev::KeyDown, move |ev: web_sys::Event| {
+                let ev = ev.dyn_into::<web_sys::KeyboardEvent>().unwrap();
+                let mut action = Msg::NoAction;
+
+                if ev.key() == "Enter" {
+                    let value = ev
+                        .target()
+                        .unwrap()
+                        .dyn_into::<web_sys::HtmlInputElement>()
+                        .unwrap()
+                        .value();
+
+                    action = Msg::UpdatePeerName(index.clone(), value);
+                }
+
+                if ev.key() == "Enter" || ev.key() == "Escape" {
+                    hide_element(&input_id2);
+                    show_element(&div_id2);
+                }
+
+                action
+            })
+        ],
+        div![format!("Peer: {}", peer.allowed_ips.to_string())],
+        div![format!("Public Key: {}", peer.public_key)],
+        a![
+            attrs! {At::Class => "btn btn-secondary",
+            At::Href => format!("api/download_peer/{}", index),
+            At::Target => "_blank", At::Download => ""},
+            "Download"
+        ],
+        button![
+            attrs! {At::Class => "btn btn-danger float-right"},
+            ev(Ev::Click, move |_| {
+                if web_sys::window()
+                    .unwrap()
+                    .confirm_with_message("Sure?")
+                    .unwrap()
+                {
+                    Msg::RemovePeer(index)
+                } else {
+                    Msg::NoAction
+                }
+            }),
+            "Remove"
+        ],
+    ]]
+}
+
 pub fn view(model: &Model) -> Vec<Node<Msg>> {
     nodes![
         nav_bar(model),
@@ -180,112 +287,17 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
         } else if model.session.is_empty() {
             login_view(model)
         } else {
+            let wg_config = &model.wireguard_config;
             nodes![
                 ul![
                     attrs! {At::Class => "list-group", At::Style => "margin-top: -1px !important"},
-                    li![
-                        attrs! {At::Class => "list-group-item rounded-0"},
-                        div![format!(
-                            "Interface: {}",
-                            model.wireguard_config.interface.address.to_string()
-                        )],
-                        div![format!(
-                            "Private Key: {}",
-                            model.wireguard_config.interface.private_key
-                        )],
-                        div![format!(
-                            "Public Key: {}",
-                            model.wireguard_config.interface.public_key
-                        )],
-                    ],
-                    model
-                        .wireguard_config
+                    display_interface(&wg_config.interface),
+                    wg_config
                         .peers
                         .clone()
                         .into_iter()
                         .enumerate()
-                        .map(|(i, peer)| {
-                            // making lots of copies for all the closures
-                            let name = peer.name.clone();
-                            let div_id1 = format!("peer{}", i);
-                            let div_id2 = div_id1.clone();
-                            let div_id3 = div_id1.clone();
-                            let input_id1 = format!("peer{}i", i);
-                            let input_id2 = input_id1.clone();
-                            let input_id3 = input_id1.clone();
-                            li![
-                                attrs! {At::Class => "list-group-item"},
-                                div![
-                                    attrs! {At::Id => div_id1},
-                                    ev(Ev::Click, move |_ev| {
-                                        hide_element(&div_id1);
-                                        show_element(&input_id1);
-                                        find_element_by_id(&input_id1)
-                                            .dyn_into::<web_sys::HtmlInputElement>()
-                                            .unwrap()
-                                            .set_value(&name); // prefill the text input with the old name
-
-                                        focus_element(&input_id1);
-                                        Msg::NoAction
-                                    }),
-                                    format!("Name: {}", peer.name)
-                                ],
-                                input![
-                                    attrs! {At::Id => format!("peer{}i", i),
-                                    At::Style => "display: none"},
-                                    ev(Ev::Blur, move |_ev: web_sys::Event| {
-                                        hide_element(&input_id3);
-                                        show_element(&div_id3);
-                                        Msg::NoAction
-                                    }),
-                                    ev(Ev::KeyDown, move |ev: web_sys::Event| {
-                                        let ev = ev.dyn_into::<web_sys::KeyboardEvent>().unwrap();
-                                        let mut action = Msg::NoAction;
-
-                                        if ev.key() == "Enter" {
-                                            let value = ev
-                                                .target()
-                                                .unwrap()
-                                                .dyn_into::<web_sys::HtmlInputElement>()
-                                                .unwrap()
-                                                .value();
-
-                                            action = Msg::UpdatePeerName(i.clone(), value);
-                                        }
-
-                                        if ev.key() == "Enter" || ev.key() == "Escape" {
-                                            hide_element(&input_id2);
-                                            show_element(&div_id2);
-                                        }
-
-                                        action
-                                    })
-                                ],
-                                div![format!("Peer: {}", peer.allowed_ips.to_string())],
-                                div![format!("Public Key: {}", peer.public_key)],
-                                a![
-                                    attrs! {At::Class => "btn btn-secondary",
-                                    At::Href => format!("api/download_peer/{}", i),
-                                    At::Target => "_blank", At::Download => ""},
-                                    "Download"
-                                ],
-                                button![
-                                    attrs! {At::Class => "btn btn-danger float-right"},
-                                    ev(Ev::Click, move |_| {
-                                        if web_sys::window()
-                                            .unwrap()
-                                            .confirm_with_message("Sure?")
-                                            .unwrap()
-                                        {
-                                            Msg::RemovePeer(i)
-                                        } else {
-                                            Msg::NoAction
-                                        }
-                                    }),
-                                    "Remove"
-                                ],
-                            ]
-                        })
+                        .map(|(i, peer)| { display_peer(i, &peer) })
                 ],
                 button![
                     attrs! {At::Class => "btn btn-secondary mt-1"},
@@ -342,6 +354,7 @@ fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
                         model.session.clone(),
                         attrs! {At::Class => "alert alert-dark mb-0 mr-2 p-2",
                         At::Style => "text-transform: capitalize"},
+                        ev(Ev::Click, |_| Msg::ShowPage(Page::EditUser))
                     ],
                     button![
                         attrs! {At::Class => "btn btn-secondary"},
@@ -429,6 +442,14 @@ fn login_view(model: &Model) -> Vec<Node<Msg>> {
                         At::Placeholder => "Password",
                         At::Style => "border-bottom-right-radius: .25rem !important"
                     },
+                    ev(Ev::KeyDown, |ev| {
+                        let ev = ev.dyn_into::<web_sys::KeyboardEvent>().unwrap();
+                        if ev.key() == "Enter" {
+                            Msg::LoginRequest
+                        } else {
+                            Msg::NoAction
+                        }
+                    }),
                     id!("password"),
                 ],
             ],
