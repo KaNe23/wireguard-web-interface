@@ -1,25 +1,26 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, shrink-to-fit=no"
-    />
-    <title>Wireguard Interface</title>
 
-    <!-- Because of Edge, see https://github.com/samthor/fast-text-encoding -->
-    <script type="text/javascript" src="/public/js/text-polyfill.min.js"></script>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <title>Wireguard Interface</title>
 
-    <link rel="stylesheet" href="public/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
-    <!--script src="public/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script-->
-  </head>
-  <body>
-    <section id="app"></section>
-    <!-- https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html -->
-    <script type="module">
-        import init from '/pkg/package.js';
-        init('/pkg/package_bg.wasm')
-    </script>
-  </body>
+  <!-- Because of Edge, see https://github.com/samthor/fast-text-encoding -->
+  <script type="text/javascript" src="/public/js/text-polyfill.min.js"></script>
+
+  <link rel="stylesheet" href="public/css/bootstrap.min.css"
+    integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+  <!--script src="public/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script-->
+</head>
+
+<body>
+  <section id="app"></section>
+  <!-- https://rustwasm.github.io/docs/wasm-bindgen/examples/without-a-bundler.html -->
+  <script type="module">
+    import init from '/pkg/package.js';
+    init('/pkg/package_bg.wasm')
+  </script>
+</body>
+
 </html>
