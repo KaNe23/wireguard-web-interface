@@ -129,6 +129,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "actix-identity"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a379b0639c293292d71defb8cc1f94c87b7705c904adf044338ad392df77c7a"
+dependencies = [
+ "actix-service",
+ "actix-web",
+ "futures 0.3.5",
+ "serde",
+ "serde_json",
+ "time 0.1.43",
+]
+
+[[package]]
 name = "actix-macros"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -213,22 +227,6 @@ checksum = "d3e4fc95dfa7e24171b2d0bb46b85f8ab0e8499e4e3caec691fc4ea65c287564"
 dependencies = [
  "futures-util",
  "pin-project",
-]
-
-[[package]]
-name = "actix-session"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca833a08799c95281204f9cc76223da4d12d2caa03de24362b3e268c60da328c"
-dependencies = [
- "actix-service",
- "actix-web",
- "bytes",
- "derive_more",
- "futures 0.3.5",
- "serde",
- "serde_json",
- "time 0.1.43",
 ]
 
 [[package]]
@@ -1830,9 +1828,10 @@ version = "0.1.0"
 dependencies = [
  "actix",
  "actix-files",
+ "actix-http",
+ "actix-identity",
  "actix-multipart",
  "actix-rt",
- "actix-session",
  "actix-web",
  "bcrypt",
  "failure",

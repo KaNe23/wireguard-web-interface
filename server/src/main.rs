@@ -1,6 +1,7 @@
 use actix_files::{Files, NamedFile};
+use actix_http::cookie::SameSite;
+use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use actix_rt;
-use actix_session::{CookieSession, Session};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use failure::{bail, Error};
@@ -58,28 +59,28 @@ fn get_iface_ip(name: String) -> Result<std::net::IpAddr, std::io::Error> {
 
 #[post("login")]
 async fn login_request(
-    session: Session,
     data: web::Data<AppData>,
     login_data: web::Json<shared::Request>,
+    id: Identity,
 ) -> impl Responder {
     match login_data.0 {
         shared::Request::Login { username, password } => {
-            if let Ok(user) = data.db.get::<User>("user") {
-                if let Ok(res) = verify(password, &user.hashed_pass) {
-                    if res {
-                        let _res = session.set("user", username);
-                        match session.get::<String>("user") {
-                            Ok(Some(user)) => {
-                                web::Json(shared::Response::LoginSuccess { session: user })
+            if let Ok(users) = data.db.all::<User>() {
+                for (_, user) in users {
+                    if user.name == username {
+                        if let Ok(res) = verify(&password, &user.hashed_pass) {
+                            if res {
+                                id.remember(user.name.to_owned());
+                                return web::Json(shared::Response::LoginSuccess {
+                                    session: user.name,
+                                });
+                            } else {
+                                return web::Json(shared::Response::LoginFailure);
                             }
-                            _ => web::Json(shared::Response::LoginFailure),
                         }
-                    } else {
-                        web::Json(shared::Response::LoginFailure)
                     }
-                } else {
-                    web::Json(shared::Response::LoginFailure)
                 }
+                web::Json(shared::Response::LoginFailure)
             } else {
                 web::Json(shared::Response::LoginFailure)
             }
@@ -89,16 +90,17 @@ async fn login_request(
 }
 
 #[post("logout")]
-async fn logout_request(session: Session) -> impl Responder {
-    session.clear();
+async fn logout_request(id: Identity) -> impl Responder {
+    id.forget();
     web::Json(shared::Response::Logout)
 }
 
 #[get("session")]
-async fn session_request(session: Session) -> impl Responder {
-    match session.get::<String>("user") {
-        Ok(Some(user)) => web::Json(shared::Response::LoginSuccess { session: user }),
-        _ => web::Json(shared::Response::LoginFailure),
+async fn session_request(id: Identity) -> impl Responder {
+    if let Some(name) = id.identity() {
+        web::Json(shared::Response::LoginSuccess { session: name })
+    } else {
+        web::Json(shared::Response::LoginFailure)
     }
 }
 
@@ -163,17 +165,18 @@ fn wg_remove_peer(peer: &shared::wg_conf::Peer) -> Result<(), std::io::Error> {
 }
 
 #[get("config")]
-async fn show_config(session: Session, data: web::Data<AppData>) -> impl Responder {
-    if session.get::<String>("user").unwrap() != None {
+async fn show_config(id: Identity, data: web::Data<AppData>) -> impl Responder {
+    if let Some(_) = id.identity() {
         let wg_config = current_wg_config(&data);
         return HttpResponse::Ok().json(shared::Response::WireGuardConf { config: wg_config });
+    } else {
+        HttpResponse::Forbidden().body("")
     }
-    HttpResponse::Forbidden().body("")
 }
 
 #[get("new_peer")]
-async fn new_peer(session: Session, data: web::Data<AppData>) -> impl Responder {
-    if session.get::<String>("user").unwrap() != None {
+async fn new_peer(id: Identity, data: web::Data<AppData>) -> impl Responder {
+    if let Some(_) = id.identity() {
         // get current config
         let mut wg_config = current_wg_config(&data);
         // get last peers allowed ip
@@ -235,11 +238,11 @@ async fn new_peer(session: Session, data: web::Data<AppData>) -> impl Responder 
 
 #[post("update_peer_name")]
 async fn update_peer_name(
-    session: Session,
+    id: Identity,
     data: web::Data<AppData>,
     request_data: web::Json<shared::Request>,
 ) -> impl Responder {
-    if session.get::<String>("user").unwrap() != None {
+    if let Some(_) = id.identity() {
         match request_data.0 {
             shared::Request::UpdatePeerName { index, name } => {
                 let mut wg_config = current_wg_config(&data);
@@ -266,11 +269,11 @@ async fn update_peer_name(
 
 #[get("download_peer/{index}")]
 async fn download_peer_file(
-    session: Session,
+    id: Identity,
     data: web::Data<AppData>,
     index: web::Path<usize>,
 ) -> Result<NamedFile, std::io::Error> {
-    if session.get::<String>("user").unwrap() != None {
+    if let Some(_) = id.identity() {
         let wg_config = current_wg_config(&data);
         let peer = &wg_config.peers[index.into_inner()];
         let mut tmp = tempfile::tempfile().unwrap();
@@ -283,11 +286,11 @@ async fn download_peer_file(
 
 #[get("remove_peer/{index}")]
 async fn remove_peer(
-    session: Session,
+    id: Identity,
     data: web::Data<AppData>,
     index: web::Path<usize>,
 ) -> impl Responder {
-    if session.get::<String>("user").unwrap() != None {
+    if let Some(_) = id.identity() {
         let mut wg_config = current_wg_config(&data);
         let peer = &wg_config.peers.remove(index.into_inner());
         let _res = wg_remove_peer(peer);
@@ -354,8 +357,13 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .wrap(CookieSession::signed(&[0; 32]).secure(false))
             .data(AppData { ip, db: db.clone() })
+            .wrap(IdentityService::new(
+                CookieIdentityPolicy::new(&[0; 32])
+                    .name("auth-cookie")
+                    .same_site(SameSite::Strict)
+                    .secure(false),
+            ))
             .service(
                 web::scope("/api/")
                     .service(login_request)
