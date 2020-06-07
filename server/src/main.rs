@@ -267,6 +267,47 @@ async fn update_peer_name(
     }
 }
 
+#[post("update_user")]
+async fn update_user(
+    id: Identity,
+    data: web::Data<AppData>,
+    request_data: web::Json<shared::Request>,
+) -> impl Responder {
+    if let Some(username) = id.identity() {
+        let (name, old_password, new_password, password_confirmation) = match request_data.0 {
+            shared::Request::UpdateUser {
+                name,
+                old_password,
+                new_password,
+                password_confirmation,
+            } => (name, old_password, new_password, password_confirmation),
+            _ => return web::Json(shared::Response::Failure),
+        };
+
+        if let Ok(users) = data.db.all::<User>() {
+            for (_, user) in users {
+                if user.name == username {
+                    if let Ok(_) = verify(&old_password, &user.hashed_pass) {
+                        if let Ok(_) = verify(&new_password, &password_confirmation) {
+                            match hash(&new_password, DEFAULT_COST) {
+                                Ok(hashed_pass) => {
+                                    let _ =
+                                        data.db.save_with_id(&User { name, hashed_pass }, "user");
+                                    return web::Json(shared::Response::Success);
+                                }
+                                Err(_) => return web::Json(shared::Response::Failure),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        web::Json(shared::Response::Failure)
+    } else {
+        web::Json(shared::Response::Failure)
+    }
+}
+
 #[get("download_peer/{index}")]
 async fn download_peer_file(
     id: Identity,
