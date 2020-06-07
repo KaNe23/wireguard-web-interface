@@ -13,9 +13,9 @@ pub struct Model {
 }
 
 pub enum Page {
+    EditUser,
     Login,
     WGCong,
-    EditUser,
 }
 
 impl Default for Page {
@@ -25,17 +25,17 @@ impl Default for Page {
 }
 
 pub enum Msg {
+    Fetched(fetch::Result<shared::Response>),
     LoginRequest,
     LogoutRequest,
-    UsernameChanged(String),
-    PasswordChanged(String),
-    NoAction,
-    UpdateUser,
-    UpdatePeerName(usize, String),
     NewPeer,
+    NoAction,
+    PasswordChanged(String),
     RemovePeer(usize),
     ShowPage(Page),
-    Fetched(fetch::Result<shared::Response>),
+    UpdateUser,
+    UpdatePeerName(usize, String),
+    UsernameChanged(String),
 }
 
 pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
