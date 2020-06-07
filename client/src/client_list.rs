@@ -10,6 +10,8 @@ pub struct Model {
     pub wireguard_config: shared::wg_conf::WireGuardConf,
     pub loaded: bool,
     pub current_page: Page,
+    pub old_password: String,
+    pub password_confirmation: String,
 }
 
 pub enum Page {
@@ -25,17 +27,25 @@ impl Default for Page {
 }
 
 pub enum Msg {
-    Fetched(fetch::Result<shared::Response>),
+    NoAction,
+
     LoginRequest,
     LogoutRequest,
+
     NewPeer,
-    NoAction,
-    PasswordChanged(String),
-    RemovePeer(usize),
-    ShowPage(Page),
-    UpdateUser,
     UpdatePeerName(usize, String),
+    RemovePeer(usize),
+
+    ShowPage(Page),
+
+    OldPasswordChanged(String),
+    PasswordChanged(String),
     UsernameChanged(String),
+    ConfirmationChanged(String),
+
+    UpdateUser,
+
+    Fetched(fetch::Result<shared::Response>),
 }
 
 pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
@@ -49,13 +59,10 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
             orders.perform_cmd(async move { Msg::Fetched(update_peer_name(i, name).await) });
         }
 
-        Msg::UsernameChanged(username) => {
-            model.username = username;
-        }
-
-        Msg::PasswordChanged(password) => {
-            model.password = password;
-        }
+        Msg::UsernameChanged(s) => model.username = s,
+        Msg::PasswordChanged(s) => model.password = s,
+        Msg::OldPasswordChanged(s) => model.old_password = s,
+        Msg::ConfirmationChanged(s) => model.password_confirmation = s,
 
         Msg::LoginRequest => {
             model.loaded = false;
@@ -63,12 +70,12 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
             let password = model.password.clone();
             orders.perform_cmd(async { Msg::Fetched(login_request(username, password).await) });
 
-            model.username.clear();
             model.password.clear();
         }
 
         Msg::LogoutRequest => {
             model.loaded = false;
+            model.username.clear();
             orders.perform_cmd(async { Msg::Fetched(logout_request().await) });
         }
 
@@ -85,9 +92,25 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
         }
 
         Msg::UpdateUser => {
-            orders
-                .skip()
-                .perform_cmd(async { Msg::Fetched(config_request().await) });
+            let username = model.username.clone();
+            let old_password = model.old_password.clone();
+            let new_password = model.password.clone();
+            let password_confirmation = model.password_confirmation.clone();
+            model.loaded = false;
+            orders.perform_cmd(async {
+                Msg::Fetched(
+                    update_user_request(
+                        username,
+                        old_password,
+                        new_password,
+                        password_confirmation,
+                    )
+                    .await,
+                )
+            });
+            model.old_password.clear();
+            model.password.clear();
+            model.password_confirmation.clear();
         }
 
         Msg::Fetched(Ok(response_data)) => match response_data {
@@ -109,8 +132,13 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
                 model.session.clear();
                 model.current_page = Page::Login;
             }
-            shared::Response::Failure => {}
-            shared::Response::Success => {}
+            shared::Response::Failure => {
+                model.loaded = true;
+            }
+            shared::Response::Success => {
+                model.loaded = true;
+                orders.perform_cmd(async { Msg::ShowPage(Page::WGCong) });
+            }
         },
 
         Msg::Fetched(Err(fail_reason)) => {
@@ -134,6 +162,27 @@ async fn login_request(username: String, password: String) -> fetch::Result<shar
 async fn logout_request() -> fetch::Result<shared::Response> {
     fetch::Request::new("/api/logout")
         .method(fetch::Method::Post)
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
+        .await
+}
+
+async fn update_user_request(
+    name: String,
+    old_password: String,
+    new_password: String,
+    password_confirmation: String,
+) -> fetch::Result<shared::Response> {
+    fetch::Request::new("/api/update_user")
+        .method(fetch::Method::Post)
+        .json(&shared::Request::UpdateUser {
+            name,
+            old_password,
+            new_password,
+            password_confirmation,
+        })?
         .fetch()
         .await?
         .check_status()?
@@ -303,12 +352,110 @@ fn wg_conf_page(wg_config: &shared::wg_conf::WireGuardConf) -> Vec<Node<Msg>> {
     ]
 }
 
-fn edit_user_page() -> Vec<Node<Msg>> {
-    nodes![button![
-        attrs! {At::Class => "btn btn-secondary mt-1"},
-        ev(Ev::Click, |_| Msg::ShowPage(Page::WGCong)),
-        "Back"
-    ],]
+fn edit_user_page(model: &Model) -> Vec<Node<Msg>> {
+    nodes![
+        div![
+            attrs! {At::Class => "span12 mt-0", At::Style => "margin-top: -1px !important"},
+            div![
+                attrs! {At::Class => "input-group"},
+                div![
+                    attrs! {At::Class => "input-group-prepend w-25"},
+                    div![
+                        attrs! {At::Class => "input-group-text rounded-0 w-100"},
+                        "Username"
+                    ],
+                ],
+                input![
+                    input_ev(Ev::Input, Msg::UsernameChanged),
+                    attrs! {
+                        At::Value => model.username,
+                        At::AutoFocus => AtValue::None,
+                        At::Type => "text",
+                        At::Class => "form-control rounded-0",
+                    },
+                    id!("user"),
+                ],
+            ],
+            div![
+                attrs! {At::Class => "input-group"},
+                div![
+                    attrs! {At::Class => "input-group-prepend w-25"},
+                    div![
+                        attrs! {At::Class => "input-group-text rounded-0 w-100"},
+                        "Old Password"
+                    ],
+                ],
+                input![
+                    input_ev(Ev::Input, Msg::OldPasswordChanged),
+                    attrs! {
+                        At::Value => model.old_password,
+                        At::AutoFocus => AtValue::None,
+                        At::Type => "password",
+                        At::Class => "form-control rounded-0",
+                    },
+                    id!("old_password"),
+                ],
+            ],
+            div![
+                attrs! {At::Class => "input-group"},
+                div![
+                    attrs! {At::Class => "input-group-prepend w-25"},
+                    div![
+                        attrs! {At::Class => "input-group-text rounded-0 w-100"},
+                        "New Password"
+                    ],
+                ],
+                input![
+                    input_ev(Ev::Input, Msg::PasswordChanged),
+                    attrs! {
+                        At::Value => model.password,
+                        At::AutoFocus => AtValue::None,
+                        At::Type => "password",
+                        At::Class => "form-control rounded-0",
+                    },
+                    id!("password"),
+                ],
+            ],
+            div![
+                attrs! {At::Class => "input-group mt-0", At::Style => "margin-top: -1px !important"},
+                div![
+                    attrs! {At::Class => "input-group-prepend w-25"},
+                    div![
+                        attrs! {At::Class => "input-group-text rounded-0 w-100", At::Style => "border-bottom-left-radius: .25rem !important"},
+                        "Confirmation"
+                    ],
+                ],
+                input![
+                    input_ev(Ev::Input, Msg::ConfirmationChanged),
+                    attrs! {
+                        At::Value => model.password_confirmation,
+                        At::Type => "password",
+                        At::Class => "form-control rounded-0",
+                        At::Style => "border-bottom-right-radius: .25rem !important"
+                    },
+                    ev(Ev::KeyDown, |ev| {
+                        let ev = ev.dyn_into::<web_sys::KeyboardEvent>().unwrap();
+                        if ev.key() == "Enter" {
+                            Msg::UpdateUser
+                        } else {
+                            Msg::NoAction
+                        }
+                    }),
+                    id!("password_confirmation"),
+                ],
+            ],
+        ],
+        button![
+            attrs! {At::Class => "btn btn-secondary mt-1"},
+            ev(Ev::Click, |_| Msg::ShowPage(Page::WGCong)),
+            "Back"
+        ],
+        button![
+            attrs! {At::Class => "btn btn-primary mt-1 float-right"},
+            ev(Ev::Click, |_| Msg::UpdateUser),
+            "Update"
+        ],
+    ]
 }
 
 pub fn view(model: &Model) -> Vec<Node<Msg>> {
@@ -320,7 +467,7 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
             match model.current_page {
                 Page::Login => login_view(model),
                 Page::WGCong => wg_conf_page(&model.wireguard_config),
-                Page::EditUser => edit_user_page(),
+                Page::EditUser => edit_user_page(&model),
             }
         }
     ]

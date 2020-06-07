@@ -288,7 +288,7 @@ async fn update_user(
             for (_, user) in users {
                 if user.name == username {
                     if let Ok(_) = verify(&old_password, &user.hashed_pass) {
-                        if let Ok(_) = verify(&new_password, &password_confirmation) {
+                        if new_password == password_confirmation {
                             match hash(&new_password, DEFAULT_COST) {
                                 Ok(hashed_pass) => {
                                     let _ =
@@ -413,6 +413,7 @@ async fn main() -> std::io::Result<()> {
                     .service(update_peer_name)
                     .service(download_peer_file)
                     .service(remove_peer)
+                    .service(update_user)
                     .service(session_request)
                     .service(show_config)
                     .default_service(web::route().to(web::HttpResponse::NotFound)),
