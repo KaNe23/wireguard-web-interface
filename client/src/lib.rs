@@ -35,7 +35,7 @@ fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
 //     View
 // ------ ------
 
-fn view(model: &Model) -> impl View<Msg> {
+fn view(model: &Model) -> impl IntoNodes<Msg> {
     div![
         style! {
             St::FontFamily => "sans-serif";
@@ -50,7 +50,7 @@ fn after_mount(_: Url, orders: &mut impl Orders<Msg>) -> AfterMount<Model> {
     let model: Model = Default::default();
     orders
         .proxy(Msg::ClientList)
-        .perform_cmd(client_list::session_request());
+        .perform_cmd(async { client_list::Msg::Fetched(client_list::session_request().await) });
     AfterMount::new(model)
 }
 

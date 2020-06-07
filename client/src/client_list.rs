@@ -1,5 +1,5 @@
 use seed::{self, prelude::*, *};
-use wasm_bindgen::*;
+#[allow(unused_imports)]
 use web_sys::console;
 
 #[derive(Default)]
@@ -16,13 +16,12 @@ pub enum Msg {
     LogoutRequest,
     UsernameChanged(String),
     PasswordChanged(String),
-    //GetWireGuardConfig,
     NoAction,
     UpdateUser,
     UpdatePeerName(usize, String),
     NewPeer,
     RemovePeer(usize),
-    Fetched(fetch::ResponseDataResult<shared::Response>),
+    Fetched(fetch::Result<shared::Response>),
 }
 
 pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
@@ -31,7 +30,7 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
 
         Msg::UpdatePeerName(i, name) => {
             model.wireguard_config.peers[i].name = name.clone();
-            orders.perform_cmd(update_peer_name(i, name));
+            orders.perform_cmd(async move { Msg::Fetched(update_peer_name(i, name).await) });
         }
 
         Msg::UsernameChanged(username) => {
@@ -43,41 +42,49 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
         }
 
         Msg::LoginRequest => {
-            orders.skip().perform_cmd(login_request(
-                model.username.clone(),
-                model.password.clone(),
-            ));
+            let username = model.username.clone();
+            let password = model.password.clone();
+            orders
+                .skip()
+                .perform_cmd(async { Msg::Fetched(login_request(username, password).await) });
+
             model.username.clear();
             model.password.clear();
         }
 
         Msg::LogoutRequest => {
-            orders.skip().perform_cmd(logout_request());
+            orders
+                .skip()
+                .perform_cmd(async { Msg::Fetched(logout_request().await) });
         }
 
         Msg::NewPeer => {
-            orders.skip().perform_cmd(new_peer_request());
+            orders
+                .skip()
+                .perform_cmd(async { Msg::Fetched(new_peer_request().await) });
         }
 
         Msg::RemovePeer(index) => {
-            orders.skip().perform_cmd(remove_peer_request(index));
+            orders
+                .skip()
+                .perform_cmd(async move { Msg::Fetched(remove_peer_request(index).await) });
         }
 
         Msg::UpdateUser => {
-            //orders.skip().perform_cmd(config_request());
+            orders
+                .skip()
+                .perform_cmd(async { Msg::Fetched(config_request().await) });
         }
 
         Msg::Fetched(Ok(response_data)) => match response_data {
             shared::Response::LoginSuccess { session } => {
                 model.session = session;
-                console::log_1(&format!("{:?}", model.session).into());
-                orders.perform_cmd(config_request());
+                orders.perform_cmd(async { Msg::Fetched(config_request().await) });
             }
             shared::Response::LoginFailure => {
                 model.loaded = true;
             }
             shared::Response::WireGuardConf { config } => {
-                console::log_1(&format!("{:?}", config).into());
                 model.wireguard_config = config;
                 model.loaded = true;
             }
@@ -87,60 +94,81 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
         },
 
         Msg::Fetched(Err(fail_reason)) => {
-            log!("Example_A error:", fail_reason);
+            log!("error:", fail_reason);
             orders.skip();
         }
     }
 }
 
-async fn login_request(username: String, password: String) -> Result<Msg, Msg> {
-    fetch::Request::new("/api/login")
+async fn login_request(username: String, password: String) -> fetch::Result<shared::Response> {
+    Request::new("/api/login")
         .method(fetch::Method::Post)
-        .send_json(&shared::Request::Login { username, password })
-        .fetch_json_data(Msg::Fetched)
+        .json(&shared::Request::Login { username, password })?
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
         .await
 }
 
-async fn logout_request() -> Result<Msg, Msg> {
+async fn logout_request() -> fetch::Result<shared::Response> {
     fetch::Request::new("/api/logout")
         .method(fetch::Method::Post)
-        .fetch_json_data(Msg::Fetched)
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
         .await
 }
 
-pub async fn session_request() -> Result<Msg, Msg> {
+pub async fn session_request() -> fetch::Result<shared::Response> {
     fetch::Request::new("/api/session")
         .method(fetch::Method::Get)
-        .fetch_json_data(Msg::Fetched)
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
         .await
 }
 
-async fn config_request() -> Result<Msg, Msg> {
+async fn config_request() -> fetch::Result<shared::Response> {
     fetch::Request::new("/api/config")
         .method(fetch::Method::Get)
-        .fetch_json_data(Msg::Fetched)
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
         .await
 }
 
-async fn new_peer_request() -> Result<Msg, Msg> {
+async fn new_peer_request() -> fetch::Result<shared::Response> {
     fetch::Request::new("/api/new_peer")
         .method(fetch::Method::Get)
-        .fetch_json_data(Msg::Fetched)
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
         .await
 }
 
-async fn remove_peer_request(index: usize) -> Result<Msg, Msg> {
+async fn remove_peer_request(index: usize) -> fetch::Result<shared::Response> {
     fetch::Request::new(format!("/api/remove_peer/{}", index))
         .method(fetch::Method::Get)
-        .fetch_json_data(Msg::Fetched)
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
         .await
 }
 
-async fn update_peer_name(index: usize, name: String) -> Result<Msg, Msg> {
+async fn update_peer_name(index: usize, name: String) -> fetch::Result<shared::Response> {
     fetch::Request::new("/api/update_peer_name")
         .method(fetch::Method::Post)
-        .send_json(&shared::Request::UpdatePeerName { index, name })
-        .fetch_json_data(Msg::Fetched)
+        .json(&shared::Request::UpdatePeerName { index, name })?
+        .fetch()
+        .await?
+        .check_status()?
+        .json()
         .await
 }
 
