@@ -20,7 +20,7 @@ pub struct Interface {
 #[cfg(target_arch = "x86_64")]
 impl Interface {
     fn new() -> Self {
-        Interface {
+        Self {
             address: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 51820),
             private_key: "".to_string(),
             public_key: "".to_string(),
@@ -28,8 +28,8 @@ impl Interface {
         }
     }
 
-    fn set_private_key(self: &mut Self, private_key: String) {
-        self.private_key = private_key.clone();
+    fn set_private_key(self: &mut Self, private_key: &str) {
+        self.private_key = private_key.to_string();
         self.public_key = WireGuardConf::gen_public_key(private_key);
     }
 }
@@ -37,7 +37,7 @@ impl Interface {
 #[cfg(not(target_arch = "x86_64"))]
 impl Interface {
     fn new() -> Self {
-        Interface {
+        Self {
             address: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 51820),
             private_key: "".to_string(),
             public_key: "".to_string(),
@@ -75,7 +75,7 @@ impl Peer {
         //    }
         //    IpAddr::V6(_addr) => {}
         //};
-        Peer {
+        Self {
             public_key: "".to_string(),
             private_key: "".to_string(),
             endpoint: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8080),
@@ -84,16 +84,22 @@ impl Peer {
         }
     }
 
-    pub fn set_private_key(self: &mut Self, private_key: String) {
-        self.private_key = private_key.clone();
+    pub fn set_private_key(self: &mut Self, private_key: &str) {
+        self.private_key = private_key.to_string();
         self.public_key = WireGuardConf::gen_public_key(private_key);
+    }
+}
+
+impl Default for Peer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[cfg(not(target_arch = "x86_64"))]
 impl Peer {
     fn new() -> Self {
-        Peer {
+        Self {
             public_key: "".to_string(),
             private_key: "".to_string(),
             endpoint: SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), 8080),
@@ -123,7 +129,7 @@ pub struct WireGuardConf {
 
 impl WireGuardConf {
     pub fn new() -> Self {
-        WireGuardConf {
+        Self {
             interface: Interface::new(),
             peers: vec![],
         }
@@ -174,7 +180,7 @@ impl ToString for WireGuardConf {
 
 #[cfg(target_arch = "x86_64")]
 impl WireGuardConf {
-    pub fn gen_public_key(private_key: String) -> String {
+    pub fn gen_public_key(private_key: &str) -> String {
         // calculate public key
         let mut wg = Command::new("wg")
             .arg("pubkey")
@@ -197,14 +203,14 @@ impl WireGuardConf {
 }
 
 impl Default for WireGuardConf {
-    fn default() -> WireGuardConf {
-        WireGuardConf::new()
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 impl From<String> for WireGuardConf {
     fn from(config: String) -> Self {
-        let lines = config.split("\n");
+        let lines = config.split('\n');
         let mut curr_block = Block::None;
         let mut peers: Vec<Peer> = vec![];
         let mut interface = Interface::new();
@@ -231,10 +237,7 @@ impl From<String> for WireGuardConf {
             }
         }
 
-        WireGuardConf {
-            interface: interface,
-            peers: peers,
-        }
+        Self { interface, peers }
     }
 }
 
@@ -252,7 +255,7 @@ fn parse_interface_attribute(attr: &str, interface: &mut Interface) {
         "ListenPort" => interface
             .address
             .set_port(value.to_string().parse::<u16>().unwrap()),
-        "PrivateKey" => interface.set_private_key(value.to_string()),
+        "PrivateKey" => interface.set_private_key(value),
         "Address" => interface.address = value.to_string().parse().unwrap(),
         _ => {}
     }
