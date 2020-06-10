@@ -283,7 +283,9 @@ async fn update_user(
             } => (name, old_password, new_password, password_confirmation),
             _ => return web::Json(shared::Response::Failure),
         };
-
+        if name == "" || new_password == "" || old_password == "" || password_confirmation == "" {
+            return web::Json(shared::Response::Failure);
+        }
         if let Ok(users) = data.db.all::<User>() {
             for (_, user) in users {
                 if user.name == username {

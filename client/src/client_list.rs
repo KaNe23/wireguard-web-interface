@@ -4,6 +4,7 @@ use web_sys::console;
 
 #[derive(Default)]
 pub struct Model {
+    pub last_response: Option<shared::Response>,
     pub session: String,
     pub username: String,
     pub password: String,
@@ -115,11 +116,13 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
 
         Msg::Fetched(Ok(response_data)) => match response_data {
             shared::Response::LoginSuccess { session } => {
+                model.last_response = Some(shared::Response::Success);
                 model.loaded = true;
                 model.session = session;
                 orders.perform_cmd(async { Msg::Fetched(config_request().await) });
             }
             shared::Response::LoginFailure => {
+                model.last_response = Some(shared::Response::Failure);
                 model.loaded = true;
             }
             shared::Response::WireGuardConf { config } => {
@@ -133,9 +136,11 @@ pub fn update(msg: Msg, model: &mut Model, orders: &mut impl Orders<Msg>) {
                 model.current_page = Page::Login;
             }
             shared::Response::Failure => {
+                model.last_response = Some(shared::Response::Failure);
                 model.loaded = true;
             }
             shared::Response::Success => {
+                model.last_response = Some(shared::Response::Success);
                 model.loaded = true;
                 orders.perform_cmd(async { Msg::ShowPage(Page::WGCong) });
             }
@@ -369,7 +374,6 @@ fn edit_user_page(model: &Model) -> Vec<Node<Msg>> {
                     input_ev(Ev::Input, Msg::UsernameChanged),
                     attrs! {
                         At::Value => model.username,
-                        At::AutoFocus => AtValue::None,
                         At::Type => "text",
                         At::Class => "form-control rounded-0",
                     },
@@ -409,7 +413,6 @@ fn edit_user_page(model: &Model) -> Vec<Node<Msg>> {
                     input_ev(Ev::Input, Msg::PasswordChanged),
                     attrs! {
                         At::Value => model.password,
-                        At::AutoFocus => AtValue::None,
                         At::Type => "password",
                         At::Class => "form-control rounded-0",
                     },
@@ -502,29 +505,50 @@ fn set_style_attribute(element: web_sys::HtmlElement, attribute: &String, value:
     let _ = style.set_property(attribute, value);
 }
 
+fn display_alert(model: &Model) -> Vec<Node<Msg>> {
+    let alert = match model.last_response {
+        Some(shared::Response::Success) => nodes![div![
+            "Success",
+            attrs! {At::Class => "alert alert-success float-left p-2 m-0",
+            At::Style => "animation: fadeOut 2s forwards;animation-delay: 3s;"}
+        ]],
+        Some(shared::Response::Failure) => nodes![div![
+            "Failure",
+            attrs! {At::Class => "alert alert-danger float-left p-2 m-0",
+            At::Style => "animation: fadeOut 2s forwards;animation-delay: 3s;"}
+        ]],
+        _ => nodes![],
+    };
+
+    return alert;
+}
+
 fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
     nodes![nav![
         attrs! {At::Class => "navbar navbar-light bg-white border rounded-top mt-1"},
         a!["Wireguard", attrs! {At::Class => "navbar-brand"}],
         if !model.loaded {
-            div![attrs![At::Class => "spinner-border text-secondary"]]
+            nodes![div![attrs![At::Class => "spinner-border text-secondary"]]]
         } else {
             if !model.session.is_empty() {
-                div![
-                    span![
-                        model.session.clone(),
-                        attrs! {At::Class => "btn alert-dark mb-0 mr-2",
-                        At::Style => "text-transform: capitalize"},
-                        ev(Ev::Click, |_| Msg::ShowPage(Page::EditUser))
-                    ],
-                    button![
-                        attrs! {At::Class => "btn btn-secondary"},
-                        ev(Ev::Click, |_| Msg::LogoutRequest),
-                        "Logout"
+                nodes![
+                    display_alert(&model)
+                    div![
+                        span![
+                            model.session.clone(),
+                            attrs! {At::Class => "btn alert-dark mb-0 mr-2",
+                            At::Style => "text-transform: capitalize"},
+                            ev(Ev::Click, |_| Msg::ShowPage(Page::EditUser))
+                        ],
+                        button![
+                            attrs! {At::Class => "btn btn-secondary"},
+                            ev(Ev::Click, |_| Msg::LogoutRequest),
+                            "Logout"
+                        ]
                     ]
                 ]
             } else {
-                div![]
+                nodes![display_alert(&model)]
             }
         }
     ]]
