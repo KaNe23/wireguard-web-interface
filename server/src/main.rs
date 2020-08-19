@@ -1,12 +1,10 @@
 use actix_files::{Files, NamedFile};
 use actix_http::cookie::SameSite;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
-use actix_rt;
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use failure::{bail, Error};
 use serde::{Deserialize, Serialize};
-use shared;
 use std::io::Write;
 use std::net::SocketAddrV4;
 use std::process::Command;
@@ -20,7 +18,7 @@ fn default_route() -> Result<String, Error> {
     let output_string = str::from_utf8(&output.stdout)?.to_string();
 
     let default = output_string
-        .split("\n")
+        .split('\n')
         .filter(|line| line.len() > 7 && &line[..7] == "default")
         .collect::<Vec<_>>();
 
@@ -29,7 +27,7 @@ fn default_route() -> Result<String, Error> {
         None => bail!("no default route found"),
     };
 
-    let link = match default.split(" ").last() {
+    let link = match default.split(' ').last() {
         Some(link) => link.to_string(),
         None => bail!("could not find default link"),
     };
@@ -37,21 +35,24 @@ fn default_route() -> Result<String, Error> {
     Ok(link)
 }
 
-fn get_iface_ip(name: String) -> Result<std::net::IpAddr, std::io::Error> {
+fn get_iface_ip(name: String) -> Result<std::net::Ipv4Addr, std::io::Error> {
     let ifaces = get_if_addrs::get_if_addrs()?;
+    let err = Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        format!("iface not found with name: {}", name),
+    ));
+
     match ifaces
         .into_iter()
         .filter(|iface| iface.name == name)
         .collect::<Vec<_>>()
         .first()
     {
-        Some(iface) => Ok(iface.ip()),
-        None => {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("iface not found with name: {}", name),
-            ))
-        }
+        Some(iface) => match iface.ip() {
+            std::net::IpAddr::V4(ip) => Ok(ip),
+            _ => err,
+        },
+        None => err,
     }
 }
 
@@ -109,35 +110,27 @@ fn current_wg_config(data: &web::Data<AppData>) -> shared::wg_conf::WireGuardCon
         .arg("show")
         .output()
         .unwrap()
-        .stdout
-        .clone();
+        .stdout;
 
     let config = str::from_utf8(&output).unwrap().to_string();
-    let mut wg_config = shared::wg_conf::WireGuardConf::from(config.clone());
+    let mut wg_config = shared::wg_conf::WireGuardConf::from(config);
 
     wg_config.interface.dns = INTERFACE_ADDRESS.parse().unwrap();
     if let Ok(ppkeys) = data.db.all::<PubPrivKey>() {
         for peer in &mut wg_config.peers {
-            match ppkeys
+            if let Some(ppk) = ppkeys
                 .values()
                 .filter(|ppk| ppk.public_key == peer.public_key)
                 .collect::<Vec<_>>()
                 .first()
             {
-                Some(ppk) => {
-                    peer.private_key = ppk.private_key.clone();
-                    peer.name = ppk.name.clone();
-                }
-                None => {}
-            }
+                peer.private_key = ppk.private_key.clone();
+                peer.name = ppk.name.clone();
+            };
         }
     }
 
-    match data.ip {
-        std::net::IpAddr::V4(ip) => wg_config.interface.address.set_ip(ip),
-        _ => {}
-    }
-
+    wg_config.interface.address.set_ip(data.ip);
     wg_config.interface.private_key = "(hidden)".to_string();
 
     wg_config
@@ -166,9 +159,9 @@ fn wg_remove_peer(peer: &shared::wg_conf::Peer) -> Result<(), std::io::Error> {
 
 #[get("config")]
 async fn show_config(id: Identity, data: web::Data<AppData>) -> impl Responder {
-    if let Some(_) = id.identity() {
+    if id.identity().is_some() {
         let wg_config = current_wg_config(&data);
-        return HttpResponse::Ok().json(shared::Response::WireGuardConf { config: wg_config });
+        HttpResponse::Ok().json(shared::Response::WireGuardConf { config: wg_config })
     } else {
         HttpResponse::Forbidden().body("")
     }
@@ -176,11 +169,11 @@ async fn show_config(id: Identity, data: web::Data<AppData>) -> impl Responder {
 
 #[get("new_peer")]
 async fn new_peer(id: Identity, data: web::Data<AppData>) -> impl Responder {
-    if let Some(_) = id.identity() {
+    if id.identity().is_some() {
         // get current config
         let mut wg_config = current_wg_config(&data);
         // get last peers allowed ip
-        let allowed_ips = if wg_config.peers.len() >= 1 {
+        let allowed_ips = if !wg_config.peers.is_empty() {
             let addr = wg_config.peers.last().unwrap().allowed_ips.addr();
             let o = addr.octets();
             ipnet::Ipv4Net::new(std::net::Ipv4Addr::new(o[0], o[1], o[2], o[3] + 1), 32).unwrap()
@@ -188,12 +181,7 @@ async fn new_peer(id: Identity, data: web::Data<AppData>) -> impl Responder {
             ipnet::Ipv4Net::new(std::net::Ipv4Addr::new(10, 200, 100, 2), 32).unwrap()
         };
         // generate private key
-        let output = Command::new("wg")
-            .arg("genkey")
-            .output()
-            .unwrap()
-            .stdout
-            .clone();
+        let output = Command::new("wg").arg("genkey").output().unwrap().stdout;
 
         let mut private_key = str::from_utf8(&output).unwrap().to_string();
         private_key.pop(); // remove linefeed
@@ -201,7 +189,7 @@ async fn new_peer(id: Identity, data: web::Data<AppData>) -> impl Responder {
         let mut new_peer = shared::wg_conf::Peer::new();
         new_peer.allowed_ips = allowed_ips;
         // generate public key
-        new_peer.set_private_key(private_key);
+        new_peer.set_private_key(&private_key);
 
         new_peer.name = format!("Peer {}", wg_config.peers.len() + 1);
 
@@ -217,12 +205,7 @@ async fn new_peer(id: Identity, data: web::Data<AppData>) -> impl Responder {
             Err(e) => println!("Could not save PubPrivKey {}", e),
         }
 
-        match data.ip {
-            std::net::IpAddr::V4(ip) => {
-                new_peer.endpoint = SocketAddrV4::new(ip, wg_config.interface.address.port())
-            }
-            _ => {}
-        }
+        new_peer.endpoint = SocketAddrV4::new(data.ip, wg_config.interface.address.port());
 
         match wg_add_peer(&new_peer) {
             Ok(_) => {}
@@ -242,7 +225,7 @@ async fn update_peer_name(
     data: web::Data<AppData>,
     request_data: web::Json<shared::Request>,
 ) -> impl Responder {
-    if let Some(_) = id.identity() {
+    if id.identity().is_some() {
         match request_data.0 {
             shared::Request::UpdatePeerName { index, name } => {
                 let mut wg_config = current_wg_config(&data);
@@ -288,18 +271,16 @@ async fn update_user(
         }
         if let Ok(users) = data.db.all::<User>() {
             for (_, user) in users {
-                if user.name == username {
-                    if let Ok(_) = verify(&old_password, &user.hashed_pass) {
-                        if new_password == password_confirmation {
-                            match hash(&new_password, DEFAULT_COST) {
-                                Ok(hashed_pass) => {
-                                    let _ =
-                                        data.db.save_with_id(&User { name, hashed_pass }, "user");
-                                    return web::Json(shared::Response::Success);
-                                }
-                                Err(_) => return web::Json(shared::Response::Failure),
-                            }
+                if user.name == username
+                    && verify(&old_password, &user.hashed_pass).is_ok()
+                    && new_password == password_confirmation
+                {
+                    match hash(&new_password, DEFAULT_COST) {
+                        Ok(hashed_pass) => {
+                            let _ = data.db.save_with_id(&User { name, hashed_pass }, "user");
+                            return web::Json(shared::Response::Success);
                         }
+                        Err(_) => return web::Json(shared::Response::Failure),
                     }
                 }
             }
@@ -316,7 +297,7 @@ async fn download_peer_file(
     data: web::Data<AppData>,
     index: web::Path<usize>,
 ) -> Result<NamedFile, std::io::Error> {
-    if let Some(_) = id.identity() {
+    if id.identity().is_some() {
         let wg_config = current_wg_config(&data);
         let peer = &wg_config.peers[index.into_inner()];
         let mut tmp = tempfile::tempfile().unwrap();
@@ -333,7 +314,7 @@ async fn remove_peer(
     data: web::Data<AppData>,
     index: web::Path<usize>,
 ) -> impl Responder {
-    if let Some(_) = id.identity() {
+    if id.identity().is_some() {
         let mut wg_config = current_wg_config(&data);
         let peer = &wg_config.peers.remove(index.into_inner());
         let _res = wg_remove_peer(peer);
@@ -343,7 +324,7 @@ async fn remove_peer(
             Err(e) => println!("Could not delete peer: {}", e),
         }
 
-        return HttpResponse::Ok().json(shared::Response::WireGuardConf { config: wg_config });
+        HttpResponse::Ok().json(shared::Response::WireGuardConf { config: wg_config })
     } else {
         HttpResponse::Forbidden().body("")
     }
@@ -367,7 +348,7 @@ struct User {
 }
 
 struct AppData {
-    ip: std::net::IpAddr,
+    ip: std::net::Ipv4Addr,
     db: jfs::Store,
 }
 
@@ -378,7 +359,7 @@ async fn main() -> std::io::Result<()> {
         Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
     };
 
-    let ip = get_iface_ip(link)?;
+    let ip: std::net::Ipv4Addr = get_iface_ip(link)?;
     let mut cfg = jfs::Config::default();
     cfg.single = true; // false is default
     let db = jfs::Store::new_with_cfg("data", cfg).unwrap();

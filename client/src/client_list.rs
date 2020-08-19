@@ -300,7 +300,7 @@ fn display_peer(index: usize, peer: &shared::wg_conf::Peer) -> Vec<Node<Msg>> {
                         .unwrap()
                         .value();
 
-                    action = Msg::UpdatePeerName(index.clone(), value);
+                    action = Msg::UpdatePeerName(index, value);
                 }
 
                 if ev.key() == "Enter" || ev.key() == "Escape" {
@@ -476,7 +476,7 @@ pub fn view(model: &Model) -> Vec<Node<Msg>> {
     ]
 }
 
-fn find_element_by_id(element_id: &String) -> web_sys::HtmlElement {
+fn find_element_by_id(element_id: &str) -> web_sys::HtmlElement {
     let window = web_sys::window().expect("no global `window` exists");
     let document = window.document().expect("should have a document on window");
     document
@@ -486,27 +486,27 @@ fn find_element_by_id(element_id: &String) -> web_sys::HtmlElement {
         .unwrap()
 }
 
-fn hide_element(element_id: &String) {
+fn hide_element(element_id: &str) {
     let element = find_element_by_id(element_id);
     set_style_attribute(element, &"display".to_string(), &"none".to_string());
 }
 
-fn show_element(element_id: &String) {
+fn show_element(element_id: &str) {
     let element = find_element_by_id(element_id);
     set_style_attribute(element, &"display".to_string(), &"".to_string());
 }
 
-fn focus_element(element_id: &String) {
+fn focus_element(element_id: &str) {
     let _ = find_element_by_id(element_id).focus();
 }
 
-fn set_style_attribute(element: web_sys::HtmlElement, attribute: &String, value: &String) {
+fn set_style_attribute(element: web_sys::HtmlElement, attribute: &str, value: &str) {
     let style = element.style();
     let _ = style.set_property(attribute, value);
 }
 
 fn display_alert(model: &Model) -> Vec<Node<Msg>> {
-    let alert = match model.last_response {
+    match model.last_response {
         Some(shared::Response::Success) => nodes![div![
             "Success",
             attrs! {At::Class => "alert alert-success float-left p-2 m-0",
@@ -518,9 +518,7 @@ fn display_alert(model: &Model) -> Vec<Node<Msg>> {
             At::Style => "animation: fadeOut 2s forwards;animation-delay: 3s;"}
         ]],
         _ => nodes![],
-    };
-
-    return alert;
+    }
 }
 
 fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
@@ -529,27 +527,25 @@ fn nav_bar(model: &Model) -> Vec<Node<Msg>> {
         a!["Wireguard", attrs! {At::Class => "navbar-brand"}],
         if !model.loaded {
             nodes![div![attrs![At::Class => "spinner-border text-secondary"]]]
-        } else {
-            if !model.session.is_empty() {
-                nodes![
-                    display_alert(&model)
-                    div![
-                        span![
-                            model.session.clone(),
-                            attrs! {At::Class => "btn alert-dark mb-0 mr-2",
-                            At::Style => "text-transform: capitalize"},
-                            ev(Ev::Click, |_| Msg::ShowPage(Page::EditUser))
-                        ],
-                        button![
-                            attrs! {At::Class => "btn btn-secondary"},
-                            ev(Ev::Click, |_| Msg::LogoutRequest),
-                            "Logout"
-                        ]
+        } else if !model.session.is_empty() {
+            nodes![
+                display_alert(&model)
+                div![
+                    span![
+                        model.session.clone(),
+                        attrs! {At::Class => "btn alert-dark mb-0 mr-2",
+                        At::Style => "text-transform: capitalize"},
+                        ev(Ev::Click, |_| Msg::ShowPage(Page::EditUser))
+                    ],
+                    button![
+                        attrs! {At::Class => "btn btn-secondary"},
+                        ev(Ev::Click, |_| Msg::LogoutRequest),
+                        "Logout"
                     ]
                 ]
-            } else {
-                nodes![display_alert(&model)]
-            }
+            ]
+        } else {
+            nodes![display_alert(&model)]
         }
     ]]
 }

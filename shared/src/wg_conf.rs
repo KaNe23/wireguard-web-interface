@@ -5,8 +5,6 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 #[cfg(target_arch = "x86_64")]
 use std::io::Write;
 #[cfg(target_arch = "x86_64")]
-use std::net::IpAddr;
-#[cfg(target_arch = "x86_64")]
 use std::process::{Command, Stdio};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,7 +26,7 @@ impl Interface {
         }
     }
 
-    fn set_private_key(self: &mut Self, private_key: &str) {
+    fn set_private_key(&mut self, private_key: &str) {
         self.private_key = private_key.to_string();
         self.public_key = WireGuardConf::gen_public_key(private_key);
     }
@@ -45,8 +43,8 @@ impl Interface {
         }
     }
 
-    fn set_private_key(self: &mut Self, private_key: String) {
-        self.private_key = private_key;
+    fn set_private_key(&mut self, private_key: &str) {
+        self.private_key = private_key.to_string();
     }
 }
 
@@ -84,7 +82,7 @@ impl Peer {
         }
     }
 
-    pub fn set_private_key(self: &mut Self, private_key: &str) {
+    pub fn set_private_key(&mut self, private_key: &str) {
         self.private_key = private_key.to_string();
         self.public_key = WireGuardConf::gen_public_key(private_key);
     }
