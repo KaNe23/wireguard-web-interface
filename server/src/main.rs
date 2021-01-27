@@ -382,20 +382,19 @@ async fn main() -> std::io::Result<()> {
     )
     .unwrap();
 
-    //if let Ok(user) = db.get::<User>("user") {
+    // use this part to create a user or use the example in the readme
+    // if let Ok(user) = db.get::<User>("user") {
     //    println!("{:?}", user);
-    //} else {
+    // } else {
     //    let name = "admin".to_string();
-    //    match hash("secure"
-    //        DEFAULT_COST,
-    //    ) {
+    //    match hash("admin", DEFAULT_COST) {
     //        Ok(hashed_pass) => {
     //            let _res = db.save_with_id(&User { name, hashed_pass }, "user");
     //            ()
     //        }
     //        Err(e) => println!("Could not hash pass {}", e),
     //    }
-    //}
+    // }
 
     HttpServer::new(move || {
         App::new()

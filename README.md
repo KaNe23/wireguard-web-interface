@@ -1,4 +1,9 @@
-Simple webinterface to create wireguard connection to a server.
+### Simple webinterface to create wireguard connection to a server.
+
+The server assumes right now, that the wireguard interface is named `wg0`
+and the interface ip is: `10.200.100.1`.
+
+I've not yet implemented a way to search for these information.
 
 Prepare a neat little release:
 ```
@@ -22,4 +27,26 @@ cd build
 tar -zcvf ../release.tar.gz *
 ```
 
-TODO: Write how this project is structured. (client, server and wg_wrapper)
+The project has three parts:
+1. `server` implemented with `actix`
+2. `client` implemented with `seed`
+3. `wg_wrapper` simple wrapper that calls the wireguard tool `wg` that can be used with the setuid bit set
+
+#### Server
+
+The server exposes a simple API to create and delete wireguard peers.
+It is possible to rename the peers and download the config.
+The password and username can be updated, but has to be set on the first run.
+
+You can create this example config (`data.json`):
+```json
+{"user":{"hashed_pass":"$2b$12$hdOnw77DyD2YwuKvaZYbIuMlNADxwqXgvyo3LjCoLTcXRimw01h32","name":"admin"}}
+```
+for a simple user:
+
+user: admin
+
+pass: admin
+
+Be aware, that the private key for each peer is also saved in the json store on the server
+to generate the wireguard peer configuration.
