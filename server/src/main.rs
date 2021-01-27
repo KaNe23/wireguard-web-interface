@@ -56,6 +56,17 @@ fn get_iface_ip(name: String) -> Result<std::net::Ipv4Addr, std::io::Error> {
     }
 }
 
+fn get_user_by_name(username: String, app_data: &web::Data<AppData>) -> Option<User> {
+    if let Ok(users) = app_data.db.all::<User>() {
+        for (_, user) in users {
+            if user.name == username {
+                return Some(user);
+            }
+        }
+    }
+    None
+}
+
 // ---- Apis ("/api/*") ----
 
 #[post("login")]
@@ -64,30 +75,27 @@ async fn login_request(
     login_data: web::Json<shared::Request>,
     id: Identity,
 ) -> impl Responder {
-    match login_data.0 {
-        shared::Request::Login { username, password } => {
-            if let Ok(users) = data.db.all::<User>() {
-                for (_, user) in users {
-                    if user.name == username {
-                        if let Ok(res) = verify(&password, &user.hashed_pass) {
-                            if res {
-                                id.remember(user.name.to_owned());
-                                return web::Json(shared::Response::LoginSuccess {
-                                    session: user.name,
-                                });
-                            } else {
-                                return web::Json(shared::Response::LoginFailure);
-                            }
-                        }
-                    }
-                }
-                web::Json(shared::Response::LoginFailure)
-            } else {
-                web::Json(shared::Response::LoginFailure)
-            }
+    // get username and password
+    let (username, password) = match login_data.0 {
+        shared::Request::Login { username, password } => (username, password),
+        _ => return web::Json(shared::Response::LoginFailure),
+    };
+
+    // search for user with matching username
+    let user = match get_user_by_name(username, &data) {
+        Some(user) => user,
+        _ => return web::Json(shared::Response::LoginFailure),
+    };
+
+    // check the password
+    if let Ok(result) = verify(&password, &user.hashed_pass) {
+        if result {
+            id.remember(user.name.to_owned());
+            return web::Json(shared::Response::LoginSuccess { session: user.name });
         }
-        _ => web::Json(shared::Response::LoginFailure),
     }
+
+    web::Json(shared::Response::LoginFailure)
 }
 
 #[post("logout")]
@@ -266,25 +274,27 @@ async fn update_user(
             } => (name, old_password, new_password, password_confirmation),
             _ => return web::Json(shared::Response::Failure),
         };
+
         if name == "" || new_password == "" || old_password == "" || password_confirmation == "" {
             return web::Json(shared::Response::Failure);
         }
-        if let Ok(users) = data.db.all::<User>() {
-            for (_, user) in users {
-                if user.name == username
-                    && verify(&old_password, &user.hashed_pass).is_ok()
-                    && new_password == password_confirmation
-                {
-                    match hash(&new_password, DEFAULT_COST) {
-                        Ok(hashed_pass) => {
-                            let _ = data.db.save_with_id(&User { name, hashed_pass }, "user");
-                            return web::Json(shared::Response::Success);
-                        }
-                        Err(_) => return web::Json(shared::Response::Failure),
-                    }
+
+        let user = match get_user_by_name(username, &data) {
+            Some(user) => user,
+            _ => return web::Json(shared::Response::Failure),
+        };
+
+        if verify(&old_password, &user.hashed_pass).is_ok() && new_password == password_confirmation
+        {
+            match hash(&new_password, DEFAULT_COST) {
+                Ok(hashed_pass) => {
+                    let _ = data.db.save_with_id(&User { name, hashed_pass }, "user");
+                    return web::Json(shared::Response::Success);
                 }
+                Err(_) => return web::Json(shared::Response::Failure),
             }
         }
+
         web::Json(shared::Response::Failure)
     } else {
         web::Json(shared::Response::Failure)
