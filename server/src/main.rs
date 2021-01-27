@@ -156,13 +156,12 @@ fn wg_add_peer(peer: &shared::wg_conf::Peer) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-fn wg_remove_peer(peer: &shared::wg_conf::Peer) -> Result<(), std::io::Error> {
+fn wg_remove_peer(peer: &shared::wg_conf::Peer) {
     let _c = Command::new("./wg_wrapper.bin")
         .args(&["remove", &peer.public_key])
         .spawn()
         .unwrap()
         .wait();
-    Ok(())
 }
 
 #[get("config")]
@@ -275,7 +274,11 @@ async fn update_user(
             _ => return web::Json(shared::Response::Failure),
         };
 
-        if name == "" || new_password == "" || old_password == "" || password_confirmation == "" {
+        if name.is_empty()
+            || new_password.is_empty()
+            || old_password.is_empty()
+            || password_confirmation.is_empty()
+        {
             return web::Json(shared::Response::Failure);
         }
 
@@ -327,7 +330,7 @@ async fn remove_peer(
     if id.identity().is_some() {
         let mut wg_config = current_wg_config(&data);
         let peer = &wg_config.peers.remove(index.into_inner());
-        let _res = wg_remove_peer(peer);
+        wg_remove_peer(peer);
 
         match data.db.delete(&peer.allowed_ips.to_string()) {
             Ok(_) => {}
@@ -370,9 +373,14 @@ async fn main() -> std::io::Result<()> {
     };
 
     let ip: std::net::Ipv4Addr = get_iface_ip(link)?;
-    let mut cfg = jfs::Config::default();
-    cfg.single = true; // false is default
-    let db = jfs::Store::new_with_cfg("data", cfg).unwrap();
+    let db = jfs::Store::new_with_cfg(
+        "data",
+        jfs::Config {
+            single: true,
+            ..Default::default()
+        },
+    )
+    .unwrap();
 
     //if let Ok(user) = db.get::<User>("user") {
     //    println!("{:?}", user);
