@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 ipnet = { version = "2.3", features = ["serde"] }
-serde = { version = "1.0.111", features = ["derive"]}
+serde = { version = "1.0.123", features = ["derive"]}
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 get_if_addrs = "0.5.3"

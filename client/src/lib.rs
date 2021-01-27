@@ -3,6 +3,18 @@ use seed::{prelude::*, *};
 mod client_list;
 
 // ------ ------
+//     Init
+// ------ ------
+
+fn init(_: Url, orders: &mut impl Orders<Msg>) -> Model {
+    let model = Model::default();
+    orders
+        .proxy(Msg::ClientList)
+        .perform_cmd(async { client_list::Msg::Fetched(client_list::session_request().await) });
+    model
+}
+
+// ------ ------
 //     Model
 // ------ ------
 
@@ -46,21 +58,10 @@ fn view(model: &Model) -> impl IntoNodes<Msg> {
     ]
 }
 
-fn after_mount(_: Url, orders: &mut impl Orders<Msg>) -> AfterMount<Model> {
-    let model: Model = Default::default();
-    orders
-        .proxy(Msg::ClientList)
-        .perform_cmd(async { client_list::Msg::Fetched(client_list::session_request().await) });
-    AfterMount::new(model)
-}
-
-// ------ ------
 //     Start
 // ------ ------
 
 #[wasm_bindgen(start)]
 pub fn start() {
-    App::builder(update, view)
-        .after_mount(after_mount)
-        .build_and_start();
+    App::start("app", init, update, view);
 }
