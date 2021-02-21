@@ -20,5 +20,8 @@ serde = { version = "1.0.123", features = ["derive"]}
 ipnet = { version = "2.3", features = ["serde"] }
 tempfile = "3.2.0"
 bcrypt = "0.9"
+regex = "1.4.3"
+lazy_static = "1.4.0"
+
 
 shared = { path = "../shared" }
