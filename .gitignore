@@ -4,3 +4,4 @@
 /release.tar.gz
 **/*.rs.bk
 **/*.bin
+.vscode/

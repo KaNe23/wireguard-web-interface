@@ -3,7 +3,8 @@ use actix_http::cookie::SameSite;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
 use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
-use failure::{bail, Error};
+use lazy_static::*;
+use regex::bytes::Regex;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::net::SocketAddrV4;
@@ -11,28 +12,52 @@ use std::process::Command;
 use std::str;
 use tempfile::NamedTempFile;
 
-const INTERFACE_ADDRESS: &str = "10.200.100.1";
+lazy_static! {
+    static ref DEFAULT_INTERFACE_REG: Regex = Regex::new("default.*dev (\\w*).*").unwrap();
+    static ref WG_INTERFACE_NAME_REG: Regex = Regex::new("interface: (\\w*).*").unwrap();
+    static ref WG_INTERFACE_NAME: String = wireguard_interface_name().unwrap_or_else(|| {
+        println!("Wireguard Interface not found");
+        std::process::exit(1)
+    });
+    static ref INTERFACE_ADDRESS: std::net::Ipv4Addr =
+        wireguard_interface_link((*WG_INTERFACE_NAME).clone()).unwrap();
+    static ref DEFAULT_LINK: String = default_device().unwrap();
+}
 
-fn default_route() -> Result<String, Error> {
-    let output = Command::new("route").output()?;
-    let output_string = str::from_utf8(&output.stdout)?.to_string();
+fn default_device() -> Option<String> {
+    String::from_utf8(
+        Command::new("ip")
+            .args(&["route", "show", "default"])
+            .output()
+            .ok()
+            .and_then(|o| {
+                let mut captures = DEFAULT_INTERFACE_REG.captures_iter(&o.stdout);
+                if let Some(cap) = captures.next() {
+                    cap.get(1).map(|x| x.as_bytes().to_vec())
+                } else {
+                    None
+                }
+            })?,
+    )
+    .ok()
+}
 
-    let default = output_string
-        .split('\n')
-        .filter(|line| line.len() > 7 && &line[..7] == "default")
-        .collect::<Vec<_>>();
+fn wireguard_interface_name() -> Option<String> {
+    if let Some(cap) = WG_INTERFACE_NAME_REG.captures_iter(&wg_show()).next() {
+        match cap.get(1).map(|x| x.as_bytes().to_vec()) {
+            Some(name) => match String::from_utf8(name) {
+                Ok(s) => Some(s),
+                Err(_) => None,
+            },
+            None => None,
+        }
+    } else {
+        None
+    }
+}
 
-    let default = match default.first() {
-        Some(line) => line,
-        None => bail!("no default route found"),
-    };
-
-    let link = match default.split(' ').last() {
-        Some(link) => link.to_string(),
-        None => bail!("could not find default link"),
-    };
-
-    Ok(link)
+fn wireguard_interface_link(name: String) -> Result<std::net::Ipv4Addr, std::io::Error> {
+    get_iface_ip(name)
 }
 
 fn get_iface_ip(name: String) -> Result<std::net::Ipv4Addr, std::io::Error> {
@@ -113,9 +138,17 @@ async fn session_request(id: Identity) -> impl Responder {
     }
 }
 
+fn wg_show() -> Vec<u8> {
+    Command::new("./wg_wrapper.bin")
+        .arg("show")
+        .output()
+        .unwrap()
+        .stdout
+}
+
 fn current_wg_config(data: &web::Data<AppData>) -> shared::wg_conf::WireGuardConf {
     let output = Command::new("./wg_wrapper.bin")
-        .arg("show")
+        .args(&["showconf", &(*WG_INTERFACE_NAME)])
         .output()
         .unwrap()
         .stdout;
@@ -123,7 +156,7 @@ fn current_wg_config(data: &web::Data<AppData>) -> shared::wg_conf::WireGuardCon
     let config = str::from_utf8(&output).unwrap().to_string();
     let mut wg_config = shared::wg_conf::WireGuardConf::from(config);
 
-    wg_config.interface.dns = INTERFACE_ADDRESS.parse().unwrap();
+    wg_config.interface.dns = *INTERFACE_ADDRESS;
     if let Ok(ppkeys) = data.db.all::<PubPrivKey>() {
         for peer in &mut wg_config.peers {
             if let Some(ppk) = ppkeys
@@ -149,7 +182,7 @@ fn wg_add_peer(peer: &shared::wg_conf::Peer) -> Result<(), std::io::Error> {
     writeln!(file, "{}", peer.to_string())?;
     let path = file.path();
     let _c = Command::new("./wg_wrapper.bin")
-        .args(&["add", path.to_str().unwrap()])
+        .args(&["add", &(*WG_INTERFACE_NAME), path.to_str().unwrap()])
         .spawn()
         .unwrap()
         .wait();
@@ -158,7 +191,7 @@ fn wg_add_peer(peer: &shared::wg_conf::Peer) -> Result<(), std::io::Error> {
 
 fn wg_remove_peer(peer: &shared::wg_conf::Peer) {
     let _c = Command::new("./wg_wrapper.bin")
-        .args(&["remove", &peer.public_key])
+        .args(&["remove", &(*WG_INTERFACE_NAME), &peer.public_key])
         .spawn()
         .unwrap()
         .wait();
@@ -367,12 +400,10 @@ struct AppData {
 
 #[actix_rt::main]
 async fn main() -> std::io::Result<()> {
-    let link = match default_route() {
-        Ok(link) => link,
-        Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::Other, e)),
-    };
+    // let's print the interface in case it is not there we exit!
+    println!("WG Interface: {}", *(WG_INTERFACE_NAME));
 
-    let ip: std::net::Ipv4Addr = get_iface_ip(link)?;
+    let ip: std::net::Ipv4Addr = get_iface_ip((*DEFAULT_LINK).clone())?;
     let db = jfs::Store::new_with_cfg(
         "data",
         jfs::Config {

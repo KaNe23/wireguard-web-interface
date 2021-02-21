@@ -1,10 +1,5 @@
 ### Simple webinterface to create wireguard connection to a server.
 
-The server assumes right now, that the wireguard interface is named `wg0`
-and the interface ip is: `10.200.100.1`.
-
-I've not yet implemented a way to search for these information.
-
 Install cargo-make:
 ```
 cargo install --force cargo-make
