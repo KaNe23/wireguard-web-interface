@@ -5,6 +5,11 @@ and the interface ip is: `10.200.100.1`.
 
 I've not yet implemented a way to search for these information.
 
+Install cargo-make:
+```
+cargo install --force cargo-make
+```
+
 Prepare a neat little release:
 ```
 cargo build --release
