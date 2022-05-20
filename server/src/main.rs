@@ -1,7 +1,6 @@
 use actix_files::{Files, NamedFile};
-use actix_http::cookie::SameSite;
 use actix_identity::{CookieIdentityPolicy, Identity, IdentityService};
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{cookie::SameSite, get, post, web, App, HttpResponse, HttpServer, Responder};
 use bcrypt::{hash, verify, DEFAULT_COST};
 use lazy_static::*;
 use regex::bytes::Regex;
@@ -94,7 +93,7 @@ fn get_user_by_name(username: String, app_data: &web::Data<AppData>) -> Option<U
 
 // ---- Apis ("/api/*") ----
 
-#[post("login")]
+#[post("/login")]
 async fn login_request(
     data: web::Data<AppData>,
     login_data: web::Json<shared::Request>,
@@ -123,13 +122,13 @@ async fn login_request(
     web::Json(shared::Response::LoginFailure)
 }
 
-#[post("logout")]
+#[post("/logout")]
 async fn logout_request(id: Identity) -> impl Responder {
     id.forget();
     web::Json(shared::Response::Logout)
 }
 
-#[get("session")]
+#[get("/session")]
 async fn session_request(id: Identity) -> impl Responder {
     if let Some(name) = id.identity() {
         web::Json(shared::Response::LoginSuccess { session: name })
@@ -197,7 +196,7 @@ fn wg_remove_peer(peer: &shared::wg_conf::Peer) {
         .wait();
 }
 
-#[get("config")]
+#[get("/config")]
 async fn show_config(id: Identity, data: web::Data<AppData>) -> impl Responder {
     if id.identity().is_some() {
         let wg_config = current_wg_config(&data);
@@ -207,7 +206,7 @@ async fn show_config(id: Identity, data: web::Data<AppData>) -> impl Responder {
     }
 }
 
-#[get("new_peer")]
+#[get("/new_peer")]
 async fn new_peer(id: Identity, data: web::Data<AppData>) -> impl Responder {
     if id.identity().is_some() {
         // get current config
@@ -259,7 +258,7 @@ async fn new_peer(id: Identity, data: web::Data<AppData>) -> impl Responder {
     HttpResponse::Forbidden().body("")
 }
 
-#[post("update_peer_name")]
+#[post("/update_peer_name")]
 async fn update_peer_name(
     id: Identity,
     data: web::Data<AppData>,
@@ -290,7 +289,7 @@ async fn update_peer_name(
     }
 }
 
-#[post("update_user")]
+#[post("/update_user")]
 async fn update_user(
     id: Identity,
     data: web::Data<AppData>,
@@ -337,7 +336,7 @@ async fn update_user(
     }
 }
 
-#[get("download_peer/{index}")]
+#[get("/download_peer/{index}")]
 async fn download_peer_file(
     id: Identity,
     data: web::Data<AppData>,
@@ -354,7 +353,7 @@ async fn download_peer_file(
     }
 }
 
-#[get("remove_peer/{index}")]
+#[get("/remove_peer/{index}")]
 async fn remove_peer(
     id: Identity,
     data: web::Data<AppData>,
@@ -429,7 +428,7 @@ async fn main() -> std::io::Result<()> {
 
     HttpServer::new(move || {
         App::new()
-            .data(AppData { ip, db: db.clone() })
+            .app_data(web::Data::new(AppData { ip, db: db.clone() }))
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(&[0; 32])
                     .name("auth-cookie")
@@ -437,7 +436,7 @@ async fn main() -> std::io::Result<()> {
                     .secure(false),
             ))
             .service(
-                web::scope("/api/")
+                web::scope("/api")
                     .service(login_request)
                     .service(logout_request)
                     .service(new_peer)
@@ -447,7 +446,7 @@ async fn main() -> std::io::Result<()> {
                     .service(update_user)
                     .service(session_request)
                     .service(show_config)
-                    .default_service(web::route().to(web::HttpResponse::NotFound)),
+                    .default_service(web::route().to(HttpResponse::NotFound)),
             )
             .service(Files::new("/public", "./client/public"))
             .service(Files::new("/pkg", "./client/pkg"))
